@@ -1,0 +1,13 @@
+{
+  "name": "antigravity-chrome-bridge",
+  "version": "1.0.0",
+  "description": "Bridge server for communication between Antigravity AI assistant and Chrome extension",
+  "main": "bridge-server.js",
+  "scripts": {
+    "start": "node bridge-server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0",
+    "express": "^4.21.0"
+  }
+}
