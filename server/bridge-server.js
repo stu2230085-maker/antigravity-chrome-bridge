@@ -15,9 +15,10 @@ const crypto = require('crypto');
 // ---------------------------------------------------------------------------
 // Configuration
 // ---------------------------------------------------------------------------
-const WS_PORT = 8767;
-const HTTP_PORT = 8766;
-const COMMAND_TIMEOUT_MS = 30_000; // 30 seconds default timeout
+const HOST = process.env.HOST || '127.0.0.1';
+const WS_PORT = Number(process.env.WS_PORT) || 8767;
+const HTTP_PORT = Number(process.env.HTTP_PORT) || 8766;
+const COMMAND_TIMEOUT_MS = Number(process.env.COMMAND_TIMEOUT_MS) || 30_000; // 30 seconds default timeout
 
 // ---------------------------------------------------------------------------
 // Colored console logging helpers
@@ -73,10 +74,10 @@ const pendingCommands = new Map();
 // ---------------------------------------------------------------------------
 // WebSocket Server — for the Chrome extension
 // ---------------------------------------------------------------------------
-const wss = new WebSocketServer({ port: WS_PORT });
+const wss = new WebSocketServer({ host: HOST, port: WS_PORT });
 
 wss.on('listening', () => {
-  logSuccess(`WebSocket server listening on ws://localhost:${WS_PORT}`);
+  logSuccess(`WebSocket server listening on ws://${HOST}:${WS_PORT}`);
 });
 
 wss.on('connection', (ws, req) => {
@@ -210,8 +211,8 @@ app.use((_req, res) => {
 
 // Start the HTTP server
 const httpServer = http.createServer(app);
-httpServer.listen(HTTP_PORT, () => {
-  logSuccess(`HTTP API server listening on http://localhost:${HTTP_PORT}`);
+httpServer.listen(HTTP_PORT, HOST, () => {
+  logSuccess(`HTTP API server listening on http://${HOST}:${HTTP_PORT}`);
 });
 
 // ---------------------------------------------------------------------------

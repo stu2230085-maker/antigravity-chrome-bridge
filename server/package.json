@@ -3,6 +3,21 @@
   "version": "1.0.0",
   "description": "Bridge server for communication between Antigravity AI assistant and Chrome extension",
   "main": "bridge-server.js",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/stu2230085-maker/antigravity-chrome-bridge.git"
+  },
+  "keywords": [
+    "antigravity",
+    "chrome-extension",
+    "browser-automation",
+    "websocket",
+    "bridge"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
   "scripts": {
     "start": "node bridge-server.js"
   },

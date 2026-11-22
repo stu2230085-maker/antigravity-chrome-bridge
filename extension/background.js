@@ -289,26 +289,26 @@ async function executeCommand(command) {
   }
 }
 
-// --------------- Find game iframe frameId ---------------
-async function findGameFrameId(tabId) {
+// --------------- Find target iframe frameId ---------------
+async function findTargetFrameId(tabId, frameUrl) {
   const frames = await chrome.webNavigation.getAllFrames({ tabId });
-  const gameFrame = frames.find(f => f.url && f.url.includes('ww2-client'));
-  if (!gameFrame) {
-    // Fallback: find any non-zero frame
-    const nonMain = frames.find(f => f.frameId !== 0 && f.url && !f.url.startsWith('about:'));
-    return nonMain ? nonMain.frameId : null;
+  if (frameUrl) {
+    const matched = frames.find(f => f.frameId !== 0 && f.url && f.url.includes(frameUrl));
+    if (matched) return matched.frameId;
   }
-  return gameFrame.frameId;
+  // Fallback: find the first non-main frame with a real URL
+  const nonMain = frames.find(f => f.frameId !== 0 && f.url && !f.url.startsWith('about:'));
+  return nonMain ? nonMain.frameId : null;
 }
 
 // --- Iframe Click At (coordinates) ---
 async function cmdIframeClickAt(params) {
-  const { x, y } = params;
+  const { x, y, frameUrl } = params;
   if (x === undefined || y === undefined) return { success: false, error: 'Missing parameters: x, y' };
 
   const tab = await resolveTab(params);
-  const frameId = await findGameFrameId(tab.id);
-  if (frameId === null) return { success: false, error: 'Game iframe not found' };
+  const frameId = await findTargetFrameId(tab.id, frameUrl);
+  if (frameId === null) return { success: false, error: 'Target iframe not found' };
 
   const results = await chrome.scripting.executeScript({
     target: { tabId: tab.id, frameIds: [frameId] },
@@ -335,12 +335,12 @@ async function cmdIframeClickAt(params) {
 
 // --- Iframe Get Elements ---
 async function cmdIframeGetElements(params) {
-  const { selector, limit = 30 } = params;
+  const { selector, limit = 30, frameUrl } = params;
   if (!selector) return { success: false, error: 'Missing parameter: selector' };
 
   const tab = await resolveTab(params);
-  const frameId = await findGameFrameId(tab.id);
-  if (frameId === null) return { success: false, error: 'Game iframe not found' };
+  const frameId = await findTargetFrameId(tab.id, frameUrl);
+  if (frameId === null) return { success: false, error: 'Target iframe not found' };
 
   const results = await chrome.scripting.executeScript({
     target: { tabId: tab.id, frameIds: [frameId] },
@@ -370,11 +370,11 @@ async function cmdIframeGetElements(params) {
 
 // --- Iframe Get Text ---
 async function cmdIframeGetText(params) {
-  const { selector } = params;
+  const { selector, frameUrl } = params;
 
   const tab = await resolveTab(params);
-  const frameId = await findGameFrameId(tab.id);
-  if (frameId === null) return { success: false, error: 'Game iframe not found' };
+  const frameId = await findTargetFrameId(tab.id, frameUrl);
+  if (frameId === null) return { success: false, error: 'Target iframe not found' };
 
   const results = await chrome.scripting.executeScript({
     target: { tabId: tab.id, frameIds: [frameId] },
@@ -396,12 +396,12 @@ async function cmdIframeGetText(params) {
 
 // --- Iframe Click (by selector) ---
 async function cmdIframeClick(params) {
-  const { selector } = params;
+  const { selector, frameUrl } = params;
   if (!selector) return { success: false, error: 'Missing parameter: selector' };
 
   const tab = await resolveTab(params);
-  const frameId = await findGameFrameId(tab.id);
-  if (frameId === null) return { success: false, error: 'Game iframe not found' };
+  const frameId = await findTargetFrameId(tab.id, frameUrl);
+  if (frameId === null) return { success: false, error: 'Target iframe not found' };
 
   const results = await chrome.scripting.executeScript({
     target: { tabId: tab.id, frameIds: [frameId] },
