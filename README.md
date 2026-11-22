@@ -1,8 +1,8 @@
-# 🤖 Antigravity Chrome Bridge
+# Antigravity Chrome Bridge
 
-AntigravityからChromeブラウザを操作するための拡張機能とブリッジサーバーのセットです。
+AntigravityからChromeブラウザを操作するための拡張機能とブリッジサーバーのセットです。本家使えないとき用
 
-## 📋 概要
+## 概要
 
 ```
 Antigravity ──HTTP──▶ ブリッジサーバー ──WebSocket──▶ Chrome拡張 ──▶ ブラウザ操作
@@ -13,7 +13,7 @@ Antigravity ──HTTP──▶ ブリッジサーバー ──WebSocket──�
 - **Chrome拡張**: ブラウザ内でコマンドを実行（クリック、入力、スクロールなど）
 - **タブグループ**: 操作は自動的に「🤖 Antigravity」タブグループ内で行われます
 
-## 🚀 セットアップ
+## セットアップ
 
 ### 1. ブリッジサーバーの起動
 
@@ -143,3 +143,4 @@ antigravity-chrome-bridge/
 - `chrome://` や拡張機能ページなど、Chromeの内部ページでは操作できません
 - スクリーンショットは表示中のタブのみ撮影可能です
 - ブリッジサーバーはローカルでのみ動作します（localhost）
+- ドパガキ駆動開発のため動かなくても知りません
