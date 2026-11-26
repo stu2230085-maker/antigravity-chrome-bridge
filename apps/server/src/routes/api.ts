@@ -12,6 +12,7 @@ import type { BridgeEventBus } from '../services/event-bus.js';
 import { NoConnectedSessionError, type SessionManager } from '../services/session-manager.js';
 import type { TraceStore } from '../services/trace-store.js';
 import type { WorkflowStore } from '../services/workflow-store.js';
+import { readDashboardAsset, resolveDashboardDistDir } from './dashboard.js';
 import { buildOpenApiSpec, renderDocsHtml } from './openapi.js';
 
 interface BatchExecutionSummary {
@@ -96,8 +97,46 @@ export function createApiApp(
   logger: Logger,
   workflowStore: WorkflowStore,
   eventBus: BridgeEventBus,
+  dashboardDir?: string,
 ): Hono {
   const app = new Hono();
+  const resolvedDashboardDir = resolveDashboardDistDir(dashboardDir);
+
+  app.get('/', (c) => {
+    return c.json({
+      name: 'Antigravity Chrome Bridge',
+      version: '2.0.0',
+      dashboard: '/ui',
+      docs: '/docs',
+      openapi: '/openapi.json',
+      status: '/status',
+      health: '/health',
+    });
+  });
+
+  app.get('/ui', (c) => {
+    return c.redirect('/ui/');
+  });
+
+  app.get('/ui/*', (c) => {
+    const asset = readDashboardAsset(resolvedDashboardDir, c.req.path);
+    if (!asset) {
+      return c.json(
+        {
+          error:
+            'Dashboard assets not found. Run "pnpm --filter @antigravity-bridge/dashboard build".',
+        },
+        404,
+      );
+    }
+    return new Response(new Uint8Array(asset.content), {
+      status: 200,
+      headers: {
+        'Content-Type': asset.contentType,
+        'Cache-Control': 'no-cache',
+      },
+    });
+  });
 
   app.post('/command', async (c) => {
     let body: unknown;

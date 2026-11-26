@@ -13,6 +13,7 @@ export interface ServerConfig {
   commandTimeoutMs: number;
   traceBufferSize: number;
   workflowsFile?: string;
+  dashboardDir?: string;
   quiet?: boolean;
 }
 
@@ -26,6 +27,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const traceBufferSize =
     env.TRACE_BUFFER_SIZE !== undefined ? Number(env.TRACE_BUFFER_SIZE) : DEFAULT_TRACE_BUFFER_SIZE;
   const workflowsFile = env.AGB_WORKFLOWS_FILE?.trim() || undefined;
+  const dashboardDir = env.AGB_DASHBOARD_DIR?.trim() || undefined;
 
   return {
     host: env.HOST || DEFAULT_HOST,
@@ -40,6 +42,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
         ? traceBufferSize
         : DEFAULT_TRACE_BUFFER_SIZE,
     workflowsFile,
+    dashboardDir,
     quiet: env.QUIET === '1' || env.NODE_ENV === 'test',
   };
 }

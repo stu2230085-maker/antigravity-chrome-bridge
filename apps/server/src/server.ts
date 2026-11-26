@@ -39,7 +39,14 @@ export function createBridgeSystem(partialConfig: Partial<ServerConfig> = {}): B
   const traceStore = new TraceStore(config.traceBufferSize, eventBus);
   const workflowStore = new WorkflowStore(config.workflowsFile);
   const sessionManager = new SessionManager(config.commandTimeoutMs, traceStore, logger, eventBus);
-  const app = createApiApp(sessionManager, traceStore, logger, workflowStore, eventBus);
+  const app = createApiApp(
+    sessionManager,
+    traceStore,
+    logger,
+    workflowStore,
+    eventBus,
+    config.dashboardDir,
+  );
 
   let httpServer: NodeHttpServer | undefined;
   const wss = new WebSocketServer({ noServer: true });

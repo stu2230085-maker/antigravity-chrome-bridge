@@ -25,17 +25,27 @@ function printBanner(host: string, httpPort: number, wsPort: number): void {
   console.log(
     `  ${colors.magenta}WebSocket${colors.reset}   →  ${colors.bright}ws://${host}:${wsPort}${colors.reset}`,
   );
+  console.log(
+    `  ${colors.green}Dashboard${colors.reset}   →  ${colors.bright}http://localhost:${httpPort}/ui${colors.reset}`,
+  );
+  console.log(
+    `  ${colors.blue}API Docs${colors.reset}    →  ${colors.bright}http://localhost:${httpPort}/docs${colors.reset}`,
+  );
   console.log('');
   console.log(`  ${colors.dim}Endpoints:${colors.reset}`);
   console.log(
-    `    ${colors.green}POST${colors.reset} /command          — Send command to extension`,
+    `    ${colors.green}POST${colors.reset} /command            — Send command to extension`,
   );
   console.log(
-    `    ${colors.green}GET ${colors.reset} /status           — Check extension connection`,
+    `    ${colors.green}GET ${colors.reset} /status             — Check extension connection`,
   );
-  console.log(`    ${colors.green}GET ${colors.reset} /health           — Server health check`);
-  console.log(`    ${colors.green}GET ${colors.reset} /api/v2/sessions  — List connected sessions`);
-  console.log(`    ${colors.green}GET ${colors.reset} /api/v2/traces    — Recent command traces`);
+  console.log(`    ${colors.green}GET ${colors.reset} /health             — Server health check`);
+  console.log(
+    `    ${colors.green}GET ${colors.reset} /api/v2/sessions    — List connected sessions`,
+  );
+  console.log(`    ${colors.green}GET ${colors.reset} /api/v2/traces      — Recent command traces`);
+  console.log(`    ${colors.green}GET ${colors.reset} /api/v2/workflows   — List saved workflows`);
+  console.log(`    ${colors.green}GET ${colors.reset} /api/v2/events      — Live SSE event stream`);
   console.log('');
   console.log(
     `  ${colors.dim}Waiting for Chrome extension to connect on ws://${host}:${wsPort}...${colors.reset}`,

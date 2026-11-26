@@ -268,4 +268,45 @@ describe('@antigravity-bridge/server saved workflows & SSE events', () => {
     }
     expect(system.eventBus.subscriberCount).toBe(0);
   });
+
+  it('serves the Web Control Center under GET /ui/ and root info under GET /', async () => {
+    const system = createBridgeSystem({
+      host: '127.0.0.1',
+      httpPort: 0,
+      wsPort: 0,
+      quiet: true,
+    });
+    systems.push(system);
+    const { httpPort } = await system.start();
+
+    const rootRes = await fetch(`http://127.0.0.1:${httpPort}/`);
+    expect(rootRes.status).toBe(200);
+    const rootJson = (await rootRes.json()) as { dashboard: string; docs: string };
+    expect(rootJson.dashboard).toBe('/ui');
+    expect(rootJson.docs).toBe('/docs');
+
+    const uiRedirectRes = await fetch(`http://127.0.0.1:${httpPort}/ui`, {
+      redirect: 'manual',
+    });
+    expect(uiRedirectRes.status).toBe(302);
+    expect(uiRedirectRes.headers.get('location')).toBe('/ui/');
+
+    const uiRes = await fetch(`http://127.0.0.1:${httpPort}/ui/`);
+    expect(uiRes.status).toBe(200);
+    expect(uiRes.headers.get('content-type')).toContain('text/html');
+    const html = await uiRes.text();
+    expect(html).toContain('Antigravity');
+
+    const cssMatch = html.match(/href="\.\/(assets\/[^"]+\.css)"/);
+    expect(cssMatch?.[1]).toBeTruthy();
+    const cssRes = await fetch(`http://127.0.0.1:${httpPort}/ui/${cssMatch?.[1]}`);
+    expect(cssRes.status).toBe(200);
+    expect(cssRes.headers.get('content-type')).toContain('text/css');
+
+    const jsMatch = html.match(/src="\.\/(assets\/[^"]+\.js)"/);
+    expect(jsMatch?.[1]).toBeTruthy();
+    const jsRes = await fetch(`http://127.0.0.1:${httpPort}/ui/${jsMatch?.[1]}`);
+    expect(jsRes.status).toBe(200);
+    expect(jsRes.headers.get('content-type')).toContain('application/javascript');
+  });
 });
