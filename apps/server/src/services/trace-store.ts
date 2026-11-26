@@ -1,10 +1,14 @@
 import { DEFAULT_TRACE_BUFFER_SIZE, type TraceEntry } from '@antigravity-bridge/protocol';
+import type { BridgeEventBus } from './event-bus.js';
 
 export class TraceStore {
   private readonly maxEntries: number;
   private readonly entries: TraceEntry[] = [];
 
-  constructor(maxEntries = DEFAULT_TRACE_BUFFER_SIZE) {
+  constructor(
+    maxEntries = DEFAULT_TRACE_BUFFER_SIZE,
+    private readonly eventBus?: BridgeEventBus,
+  ) {
     this.maxEntries = Math.max(1, maxEntries);
   }
 
@@ -13,6 +17,7 @@ export class TraceStore {
       this.entries.shift();
     }
     this.entries.push(entry);
+    this.eventBus?.emitTrace(entry);
   }
 
   list(limit?: number): TraceEntry[] {

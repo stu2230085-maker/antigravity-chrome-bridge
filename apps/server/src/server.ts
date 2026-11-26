@@ -5,8 +5,10 @@ import { WebSocketServer } from 'ws';
 import { loadConfig, type ServerConfig } from './config.js';
 import { createLogger, type Logger } from './logger.js';
 import { createApiApp } from './routes/api.js';
+import { BridgeEventBus } from './services/event-bus.js';
 import { SessionManager } from './services/session-manager.js';
 import { TraceStore } from './services/trace-store.js';
+import { WorkflowStore } from './services/workflow-store.js';
 import { attachWsHub } from './ws/ws-hub.js';
 
 export type NodeHttpServer = ReturnType<typeof serve>;
@@ -17,6 +19,8 @@ export interface BridgeSystem {
   wss: WebSocketServer;
   sessionManager: SessionManager;
   traceStore: TraceStore;
+  workflowStore: WorkflowStore;
+  eventBus: BridgeEventBus;
   config: ServerConfig;
   logger: Logger;
   start: () => Promise<{ httpPort: number; wsPort: number }>;
@@ -31,23 +35,16 @@ export function createBridgeSystem(partialConfig: Partial<ServerConfig> = {}): B
   };
 
   const logger = createLogger(config.quiet);
-  const traceStore = new TraceStore(config.traceBufferSize);
-  const sessionManager = new SessionManager(config.commandTimeoutMs, traceStore, logger);
-  const app = createApiApp(sessionManager, traceStore, logger);
+  const eventBus = new BridgeEventBus();
+  const traceStore = new TraceStore(config.traceBufferSize, eventBus);
+  const workflowStore = new WorkflowStore(config.workflowsFile);
+  const sessionManager = new SessionManager(config.commandTimeoutMs, traceStore, logger, eventBus);
+  const app = createApiApp(sessionManager, traceStore, logger, workflowStore, eventBus);
 
   let httpServer: NodeHttpServer | undefined;
-  let wss: WebSocketServer | undefined;
-  let started = false;
-
-  // Create WebSocketServer lazily inside start() or immediately?
-  // Exposing wss on BridgeSystem before start or binding on start:
-  // If port 0 is passed, binding inside start() avoids listening twice while still creating wss cleanly.
-  wss = new WebSocketServer({ noServer: true });
-
-  // Use a separate WSS bound to wsPort during start()
+  const wss = new WebSocketServer({ noServer: true });
   let boundWss: WebSocketServer | undefined;
 
-  // Actually create real WebSocketServer only when start() runs so dynamic port 0 works cleanly
   const start = async (): Promise<{ httpPort: number; wsPort: number }> => {
     if (started && httpServer && boundWss) {
       const httpAddr = httpServer.address() as AddressInfo;
@@ -104,8 +101,11 @@ export function createBridgeSystem(partialConfig: Partial<ServerConfig> = {}): B
     };
   };
 
+  let started = false;
+
   const stop = async (): Promise<void> => {
     sessionManager.rejectAllPending('Server shutting down');
+    eventBus.closeAll();
 
     if (boundWss) {
       for (const client of boundWss.clients) {
@@ -117,13 +117,17 @@ export function createBridgeSystem(partialConfig: Partial<ServerConfig> = {}): B
       boundWss = undefined;
     }
 
-    if (wss) {
-      await new Promise<void>((resolve) => {
-        wss?.close(() => resolve());
-      });
-    }
+    await new Promise<void>((resolve) => {
+      wss.close(() => resolve());
+    });
 
     if (httpServer) {
+      if (
+        'closeAllConnections' in httpServer &&
+        typeof httpServer.closeAllConnections === 'function'
+      ) {
+        httpServer.closeAllConnections();
+      }
       await new Promise<void>((resolve) => {
         httpServer?.close(() => resolve());
       });
@@ -139,6 +143,8 @@ export function createBridgeSystem(partialConfig: Partial<ServerConfig> = {}): B
     wss,
     sessionManager,
     traceStore,
+    workflowStore,
+    eventBus,
     config,
     logger,
     start,

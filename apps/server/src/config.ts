@@ -12,6 +12,7 @@ export interface ServerConfig {
   wsPort: number;
   commandTimeoutMs: number;
   traceBufferSize: number;
+  workflowsFile?: string;
   quiet?: boolean;
 }
 
@@ -24,6 +25,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       : DEFAULT_COMMAND_TIMEOUT_MS;
   const traceBufferSize =
     env.TRACE_BUFFER_SIZE !== undefined ? Number(env.TRACE_BUFFER_SIZE) : DEFAULT_TRACE_BUFFER_SIZE;
+  const workflowsFile = env.AGB_WORKFLOWS_FILE?.trim() || undefined;
 
   return {
     host: env.HOST || DEFAULT_HOST,
@@ -37,6 +39,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
       Number.isFinite(traceBufferSize) && traceBufferSize > 0
         ? traceBufferSize
         : DEFAULT_TRACE_BUFFER_SIZE,
+    workflowsFile,
     quiet: env.QUIET === '1' || env.NODE_ENV === 'test',
   };
 }

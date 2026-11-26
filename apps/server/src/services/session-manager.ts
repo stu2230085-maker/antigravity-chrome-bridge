@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import type { SessionSummary, WsCommandEnvelope } from '@antigravity-bridge/protocol';
 import { WebSocket } from 'ws';
 import type { Logger } from '../logger.js';
+import type { BridgeEventBus } from './event-bus.js';
 import type { TraceStore } from './trace-store.js';
 
 export interface ExtensionSession {
@@ -41,6 +42,7 @@ export class SessionManager {
     private readonly commandTimeoutMs: number,
     private readonly traceStore: TraceStore,
     private readonly logger: Logger,
+    private readonly eventBus?: BridgeEventBus,
   ) {}
 
   registerConnection(ws: WebSocket, remoteAddress?: string): ExtensionSession {
@@ -58,6 +60,7 @@ export class SessionManager {
     this.sessions.set(sessionId, session);
     this.socketToSessionId.set(ws, sessionId);
     this.activeSessionId = sessionId;
+    this.eventBus?.emitSessions(this.listSessions());
     return session;
   }
 
@@ -107,6 +110,7 @@ export class SessionManager {
       }
     }
 
+    this.eventBus?.emitSessions(this.listSessions());
     return session;
   }
 
@@ -309,6 +313,8 @@ export class SessionManager {
         pending.reject(new Error(reason));
       }
     }
+
+    this.eventBus?.emitSessions(this.listSessions());
   }
 
   rejectAllPending(reason = 'Server shutting down'): void {

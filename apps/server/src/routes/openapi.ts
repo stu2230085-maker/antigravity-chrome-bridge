@@ -177,6 +177,129 @@ export function buildOpenApiSpec(serverUrl = `http://127.0.0.1:${DEFAULT_HTTP_PO
           },
         },
       },
+      '/api/v2/workflows': {
+        get: {
+          summary: 'List saved workflows',
+          operationId: 'listWorkflows',
+          responses: {
+            '200': {
+              description: 'Saved workflows',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/WorkflowsResponse' },
+                },
+              },
+            },
+          },
+        },
+        post: {
+          summary: 'Create or update a saved workflow',
+          operationId: 'upsertWorkflow',
+          requestBody: {
+            required: true,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/WorkflowUpsertRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'Workflow updated',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/WorkflowResponse' },
+                },
+              },
+            },
+            '201': {
+              description: 'Workflow created',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/WorkflowResponse' },
+                },
+              },
+            },
+            '400': { description: 'Invalid workflow payload' },
+          },
+        },
+      },
+      '/api/v2/workflows/{id}': {
+        delete: {
+          summary: 'Delete a saved workflow by ID',
+          operationId: 'deleteWorkflow',
+          parameters: [
+            {
+              name: 'id',
+              in: 'path',
+              required: true,
+              schema: { type: 'string' },
+            },
+          ],
+          responses: {
+            '200': {
+              description: 'Workflow deleted',
+              content: {
+                'application/json': {
+                  schema: {
+                    type: 'object',
+                    required: ['deleted'],
+                    properties: { deleted: { type: 'boolean' } },
+                  },
+                },
+              },
+            },
+            '404': { description: 'Workflow not found' },
+          },
+        },
+      },
+      '/api/v2/workflows/{id}/run': {
+        post: {
+          summary: 'Execute a saved workflow against a connected session',
+          operationId: 'runWorkflow',
+          parameters: [
+            {
+              name: 'id',
+              in: 'path',
+              required: true,
+              schema: { type: 'string' },
+            },
+          ],
+          requestBody: {
+            required: false,
+            content: {
+              'application/json': {
+                schema: { $ref: '#/components/schemas/WorkflowRunRequest' },
+              },
+            },
+          },
+          responses: {
+            '200': {
+              description: 'Workflow execution result',
+              content: {
+                'application/json': {
+                  schema: { $ref: '#/components/schemas/WorkflowRunResponse' },
+                },
+              },
+            },
+            '400': { description: 'Invalid run request body' },
+            '404': { description: 'Workflow not found' },
+            '503': { description: 'No connected Chrome extension session' },
+          },
+        },
+      },
+      '/api/v2/events': {
+        get: {
+          summary: 'Stream real-time sessions and trace events via Server-Sent Events',
+          operationId: 'streamEvents',
+          responses: {
+            '200': {
+              description: 'SSE stream emitting snapshot, sessions, and trace events',
+              content: { 'text/event-stream': { schema: { type: 'string' } } },
+            },
+          },
+        },
+      },
       '/openapi.json': {
         get: {
           summary: 'OpenAPI 3.1 JSON specification',
@@ -343,6 +466,82 @@ export function buildOpenApiSpec(serverUrl = `http://127.0.0.1:${DEFAULT_HTTP_PO
             count: { type: 'integer' },
           },
         },
+        SavedWorkflow: {
+          type: 'object',
+          required: ['id', 'name', 'steps', 'createdAt', 'updatedAt'],
+          properties: {
+            id: { type: 'string' },
+            name: { type: 'string' },
+            description: { type: 'string' },
+            steps: {
+              type: 'array',
+              minItems: 1,
+              items: { $ref: '#/components/schemas/BatchStep' },
+            },
+            createdAt: { type: 'number' },
+            updatedAt: { type: 'number' },
+          },
+        },
+        WorkflowUpsertRequest: {
+          type: 'object',
+          required: ['name', 'steps'],
+          properties: {
+            id: { type: 'string' },
+            name: { type: 'string' },
+            description: { type: 'string' },
+            steps: {
+              type: 'array',
+              minItems: 1,
+              items: { $ref: '#/components/schemas/BatchStep' },
+            },
+          },
+        },
+        WorkflowResponse: {
+          type: 'object',
+          required: ['workflow'],
+          properties: {
+            workflow: { $ref: '#/components/schemas/SavedWorkflow' },
+          },
+        },
+        WorkflowsResponse: {
+          type: 'object',
+          required: ['workflows'],
+          properties: {
+            workflows: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/SavedWorkflow' },
+            },
+          },
+        },
+        WorkflowRunRequest: {
+          type: 'object',
+          properties: {
+            sessionId: { type: 'string' },
+            stopOnError: { type: 'boolean', default: true },
+          },
+        },
+        WorkflowRunResponse: {
+          type: 'object',
+          required: [
+            'workflowId',
+            'success',
+            'completedSteps',
+            'totalSteps',
+            'durationMs',
+            'results',
+          ],
+          properties: {
+            workflowId: { type: 'string' },
+            success: { type: 'boolean' },
+            completedSteps: { type: 'integer' },
+            totalSteps: { type: 'integer' },
+            durationMs: { type: 'number' },
+            results: {
+              type: 'array',
+              items: { $ref: '#/components/schemas/BatchStepResult' },
+            },
+          },
+        },
       },
     },
     'x-actions': COMMAND_ACTIONS.map((action) => ({
@@ -388,6 +587,11 @@ export function renderDocsHtml(): string {
       <tr><td><span class="badge">POST</span></td><td><code>/api/v2/batch</code></td><td>Execute a sequential batch of commands</td></tr>
       <tr><td><span class="badge">GET</span></td><td><code>/api/v2/sessions</code></td><td>List connected Chrome extension sessions</td></tr>
       <tr><td><span class="badge">GET</span></td><td><code>/api/v2/traces</code></td><td>List recent command execution traces</td></tr>
+      <tr><td><span class="badge">GET</span></td><td><code>/api/v2/workflows</code></td><td>List saved workflows</td></tr>
+      <tr><td><span class="badge">POST</span></td><td><code>/api/v2/workflows</code></td><td>Create or update a saved workflow</td></tr>
+      <tr><td><span class="badge">DELETE</span></td><td><code>/api/v2/workflows/:id</code></td><td>Delete a saved workflow</td></tr>
+      <tr><td><span class="badge">POST</span></td><td><code>/api/v2/workflows/:id/run</code></td><td>Execute a saved workflow</td></tr>
+      <tr><td><span class="badge">GET</span></td><td><code>/api/v2/events</code></td><td>Real-time SSE stream of sessions and traces</td></tr>
       <tr><td><span class="badge">GET</span></td><td><code>/openapi.json</code></td><td>OpenAPI 3.1 JSON specification</td></tr>
       <tr><td><span class="badge">GET</span></td><td><code>/docs</code></td><td>This HTML reference page</td></tr>
     </tbody>

@@ -159,6 +159,37 @@ export const BatchResponseSchema = z.object({
 export type BatchResponse = z.infer<typeof BatchResponseSchema>;
 
 // ============================================================================
+// HTTP API v2 Saved Workflows Schemas
+// ============================================================================
+
+export const SavedWorkflowSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  steps: z.array(BatchStepSchema).min(1),
+  createdAt: z.number(),
+  updatedAt: z.number(),
+});
+
+export type SavedWorkflow = z.infer<typeof SavedWorkflowSchema>;
+
+export const WorkflowUpsertSchema = z.object({
+  id: z.string().min(1).optional(),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  steps: z.array(BatchStepSchema).min(1),
+});
+
+export type WorkflowUpsertInput = z.infer<typeof WorkflowUpsertSchema>;
+
+export const WorkflowRunRequestSchema = z.object({
+  sessionId: z.string().min(1).optional(),
+  stopOnError: z.boolean().optional(),
+});
+
+export type WorkflowRunRequest = z.infer<typeof WorkflowRunRequestSchema>;
+
+// ============================================================================
 // Snapshot & Telemetry Data Schemas
 // ============================================================================
 

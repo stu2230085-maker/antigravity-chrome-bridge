@@ -1,18 +1,101 @@
 import {
   BatchRequestSchema,
+  type BatchStep,
   type BatchStepResult,
   HttpCommandRequestSchema,
+  WorkflowRunRequestSchema,
+  WorkflowUpsertSchema,
 } from '@antigravity-bridge/protocol';
 import { Hono } from 'hono';
 import type { Logger } from '../logger.js';
+import type { BridgeEventBus } from '../services/event-bus.js';
 import { NoConnectedSessionError, type SessionManager } from '../services/session-manager.js';
 import type { TraceStore } from '../services/trace-store.js';
+import type { WorkflowStore } from '../services/workflow-store.js';
 import { buildOpenApiSpec, renderDocsHtml } from './openapi.js';
+
+interface BatchExecutionSummary {
+  success: boolean;
+  completedSteps: number;
+  totalSteps: number;
+  durationMs: number;
+  results: BatchStepResult[];
+}
+
+async function executeBatchSteps(
+  sessionManager: SessionManager,
+  steps: BatchStep[],
+  stopOnError: boolean,
+  sessionId?: string,
+): Promise<BatchExecutionSummary> {
+  const batchStartedAt = Date.now();
+  const results: BatchStepResult[] = [];
+
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    if (!step) continue;
+
+    const stepStartedAt = Date.now();
+    try {
+      const outcome = await sessionManager.sendCommand(step.action, step.params ?? {}, sessionId);
+      const stepSuccess = outcome.result.success !== false;
+      const stepError = typeof outcome.result.error === 'string' ? outcome.result.error : undefined;
+
+      results.push({
+        index: i,
+        action: step.action,
+        success: stepSuccess,
+        id: outcome.id,
+        durationMs: Date.now() - stepStartedAt,
+        result: outcome.result,
+        ...(stepError ? { error: stepError } : {}),
+      });
+
+      if (!stepSuccess && stopOnError) {
+        break;
+      }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      results.push({
+        index: i,
+        action: step.action,
+        success: false,
+        durationMs: Date.now() - stepStartedAt,
+        error: message,
+      });
+
+      if (stopOnError) {
+        break;
+      }
+    }
+
+    if (step.delayMs && step.delayMs > 0 && i < steps.length - 1) {
+      await new Promise((resolve) => setTimeout(resolve, step.delayMs));
+    }
+  }
+
+  const completedSteps = results.filter((r) => r.success).length;
+  const success = results.length === steps.length && completedSteps === steps.length;
+
+  return {
+    success,
+    completedSteps,
+    totalSteps: steps.length,
+    durationMs: Date.now() - batchStartedAt,
+    results,
+  };
+}
+
+function formatSseMessage(event: string, data: unknown): string {
+  return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
+}
 
 export function createApiApp(
   sessionManager: SessionManager,
   traceStore: TraceStore,
   logger: Logger,
+  workflowStore: WorkflowStore,
+  eventBus: BridgeEventBus,
 ): Hono {
   const app = new Hono();
 
@@ -75,62 +158,152 @@ export function createApiApp(
       return c.json({ error: msg }, 503);
     }
 
-    const batchStartedAt = Date.now();
-    const results: BatchStepResult[] = [];
+    const summary = await executeBatchSteps(sessionManager, steps, stopOnError, sessionId);
+    return c.json(summary);
+  });
 
-    for (let i = 0; i < steps.length; i++) {
-      const step = steps[i];
-      if (!step) continue;
+  app.get('/api/v2/workflows', (c) => {
+    return c.json({
+      workflows: workflowStore.list(),
+    });
+  });
 
-      const stepStartedAt = Date.now();
+  app.post('/api/v2/workflows', async (c) => {
+    let body: unknown;
+    try {
+      body = await c.req.json();
+    } catch {
+      body = undefined;
+    }
+
+    const parsed = WorkflowUpsertSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json(
+        { error: 'Invalid workflow payload: "name" and non-empty "steps" array are required' },
+        400,
+      );
+    }
+
+    const { workflow, created } = workflowStore.save(parsed.data);
+    return c.json({ workflow }, created ? 201 : 200);
+  });
+
+  app.delete('/api/v2/workflows/:id', (c) => {
+    const id = c.req.param('id');
+    const deleted = workflowStore.delete(id);
+    if (!deleted) {
+      return c.json({ error: `Workflow "${id}" not found` }, 404);
+    }
+    return c.json({ deleted: true });
+  });
+
+  app.post('/api/v2/workflows/:id/run', async (c) => {
+    const id = c.req.param('id');
+    const workflow = workflowStore.get(id);
+    if (!workflow) {
+      return c.json({ error: `Workflow "${id}" not found` }, 404);
+    }
+
+    let body: unknown = {};
+    const rawText = await c.req.text();
+    if (rawText.trim().length > 0) {
       try {
-        const outcome = await sessionManager.sendCommand(step.action, step.params ?? {}, sessionId);
-        const stepSuccess = outcome.result.success !== false;
-        const stepError =
-          typeof outcome.result.error === 'string' ? outcome.result.error : undefined;
-
-        results.push({
-          index: i,
-          action: step.action,
-          success: stepSuccess,
-          id: outcome.id,
-          durationMs: Date.now() - stepStartedAt,
-          result: outcome.result,
-          ...(stepError ? { error: stepError } : {}),
-        });
-
-        if (!stepSuccess && stopOnError) {
-          break;
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        results.push({
-          index: i,
-          action: step.action,
-          success: false,
-          durationMs: Date.now() - stepStartedAt,
-          error: message,
-        });
-
-        if (stopOnError) {
-          break;
-        }
-      }
-
-      if (step.delayMs && step.delayMs > 0 && i < steps.length - 1) {
-        await new Promise((resolve) => setTimeout(resolve, step.delayMs));
+        body = JSON.parse(rawText);
+      } catch {
+        return c.json({ error: 'Invalid JSON body' }, 400);
       }
     }
 
-    const completedSteps = results.filter((r) => r.success).length;
-    const success = results.length === steps.length && completedSteps === steps.length;
+    const parsed = WorkflowRunRequestSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: 'Invalid workflow run options' }, 400);
+    }
+
+    const { sessionId, stopOnError = true } = parsed.data;
+    if (!sessionManager.resolveTargetSession(sessionId)) {
+      const msg = sessionId
+        ? `Chrome extension session "${sessionId}" is not connected`
+        : 'Chrome extension is not connected';
+      return c.json({ error: msg }, 503);
+    }
+
+    const summary = await executeBatchSteps(sessionManager, workflow.steps, stopOnError, sessionId);
 
     return c.json({
-      success,
-      completedSteps,
-      totalSteps: steps.length,
-      durationMs: Date.now() - batchStartedAt,
-      results,
+      workflowId: workflow.id,
+      ...summary,
+    });
+  });
+
+  app.get('/api/v2/events', (c) => {
+    const encoder = new TextEncoder();
+    let unsubscribe: (() => void) | undefined;
+    let heartbeatTimer: ReturnType<typeof setInterval> | undefined;
+    let closed = false;
+
+    const cleanup = () => {
+      if (closed) return;
+      closed = true;
+      if (heartbeatTimer) {
+        clearInterval(heartbeatTimer);
+        heartbeatTimer = undefined;
+      }
+      unsubscribe?.();
+      unsubscribe = undefined;
+    };
+
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        const safeEnqueue = (chunk: string) => {
+          if (closed) return;
+          try {
+            controller.enqueue(encoder.encode(chunk));
+          } catch {
+            cleanup();
+          }
+        };
+
+        const closeStream = () => {
+          if (closed) return;
+          cleanup();
+          try {
+            controller.close();
+          } catch {
+            // Stream already closed
+          }
+        };
+
+        // Initial snapshot event
+        safeEnqueue(
+          formatSseMessage('snapshot', {
+            sessions: sessionManager.listSessions(),
+            traces: traceStore.list(),
+          }),
+        );
+
+        unsubscribe = eventBus.subscribe((event) => {
+          safeEnqueue(formatSseMessage(event.type, event.data));
+        }, closeStream);
+
+        heartbeatTimer = setInterval(() => {
+          safeEnqueue(': heartbeat\n\n');
+        }, 15_000);
+        heartbeatTimer.unref?.();
+
+        c.req.raw.signal.addEventListener('abort', closeStream, { once: true });
+      },
+      cancel() {
+        cleanup();
+      },
+    });
+
+    return new Response(stream, {
+      status: 200,
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache, no-transform',
+        Connection: 'keep-alive',
+      },
     });
   });
 
