@@ -1,3 +1,4 @@
+import { cmdClearMarks, cmdSnapshot } from '../snapshot/index.js';
 import {
   cmdEvaluate,
   cmdGetContent,
@@ -89,6 +90,10 @@ export async function executeCommand(command: CommandRequest): Promise<CommandRe
       return await cmdIframeGetText(params);
     case 'iframe_click':
       return await cmdIframeClick(params);
+    case 'snapshot':
+      return await cmdSnapshot(params);
+    case 'clear_marks':
+      return await cmdClearMarks(params);
     default:
       return { success: false, error: `Unknown action: ${command.action}` };
   }

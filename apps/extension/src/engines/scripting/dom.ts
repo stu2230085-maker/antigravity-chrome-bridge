@@ -1,4 +1,5 @@
 import { resolveTab } from '../../background/tab-group.js';
+import { resolveSelector } from '../snapshot/index.js';
 import type { CommandResult } from './types.js';
 
 interface FoundOutcome {
@@ -8,7 +9,7 @@ interface FoundOutcome {
 }
 
 export async function cmdClick(params: Record<string, unknown>): Promise<CommandResult> {
-  const selector = typeof params.selector === 'string' ? params.selector : undefined;
+  const selector = resolveSelector(params);
   const allFrames = Boolean(params.allFrames);
   if (!selector) return { success: false, error: 'Missing parameter: selector' };
 
@@ -95,7 +96,7 @@ export async function cmdClickAt(params: Record<string, unknown>): Promise<Comma
 }
 
 export async function cmdType(params: Record<string, unknown>): Promise<CommandResult> {
-  const selector = typeof params.selector === 'string' ? params.selector : undefined;
+  const selector = resolveSelector(params);
   const text = params.text !== undefined ? String(params.text) : undefined;
   const clear = params.clear === undefined ? true : Boolean(params.clear);
   const allFrames = Boolean(params.allFrames);
@@ -140,7 +141,7 @@ export async function cmdType(params: Record<string, unknown>): Promise<CommandR
 }
 
 export async function cmdHover(params: Record<string, unknown>): Promise<CommandResult> {
-  const selector = typeof params.selector === 'string' ? params.selector : undefined;
+  const selector = resolveSelector(params);
   const allFrames = Boolean(params.allFrames);
   if (!selector) return { success: false, error: 'Missing parameter: selector' };
 
@@ -177,7 +178,7 @@ export async function cmdHover(params: Record<string, unknown>): Promise<Command
 }
 
 export async function cmdSelect(params: Record<string, unknown>): Promise<CommandResult> {
-  const selector = typeof params.selector === 'string' ? params.selector : undefined;
+  const selector = resolveSelector(params);
   const value = params.value !== undefined ? String(params.value) : undefined;
   if (!selector) return { success: false, error: 'Missing parameter: selector' };
   if (value === undefined) return { success: false, error: 'Missing parameter: value' };
@@ -207,7 +208,7 @@ export async function cmdSelect(params: Record<string, unknown>): Promise<Comman
 export async function cmdScroll(params: Record<string, unknown>): Promise<CommandResult> {
   const x = typeof params.x === 'number' ? params.x : 0;
   const y = typeof params.y === 'number' ? params.y : 0;
-  const selector = typeof params.selector === 'string' ? params.selector : null;
+  const selector = resolveSelector(params) ?? null;
   const direction = typeof params.direction === 'string' ? params.direction : null;
   const amount = typeof params.amount === 'number' ? params.amount : 500;
   const allFrames = Boolean(params.allFrames);
