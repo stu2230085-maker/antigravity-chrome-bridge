@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Antigravity Chrome Bridge — Control Center</title>
+  <link rel="stylesheet" href="./src/styles.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+            <title>Antigravity Chrome Bridge</title>
+            <rect width="24" height="24" rx="7" fill="url(#agb_grad)" />
+            <path d="M12 5L17.5 17H14.5L13.3 14.3H10.7L9.5 17H6.5L12 5ZM12 9.4L11.1 12.1H12.9L12 9.4Z" fill="#fff" />
+            <defs>
+              <linearGradient id="agb_grad" x1="0" y1="0" x2="24" y2="24">
+                <stop stop-color="#6366f1" />
+                <stop offset="1" stop-color="#06b6d4" />
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div>
+          <h1>Antigravity Control Center</h1>
+          <p class="subtitle">Chrome Bridge v2.0 • Real-Time Browser Automation</p>
+        </div>
+      </div>
+
+      <div class="topbar-controls">
+        <div class="status-pills">
+          <span id="serverStatusPill" class="pill pill-muted">
+            <span class="dot"></span>
+            <span id="serverStatusText">Checking…</span>
+          </span>
+          <span id="sseStatusPill" class="pill pill-muted">
+            <span class="dot"></span>
+            <span id="sseStatusText">SSE: Connecting</span>
+          </span>
+        </div>
+
+        <label class="control-field">
+          <span>Session</span>
+          <select id="sessionSelect" aria-label="Target Session">
+            <option value="">auto (default)</option>
+          </select>
+        </label>
+
+        <label class="control-field">
+          <span>Auth Token</span>
+          <input
+            id="authTokenInput"
+            type="password"
+            placeholder="Optional Bearer token"
+            autocomplete="off"
+          />
+        </label>
+
+        <a class="btn btn-ghost btn-sm" href="/docs" target="_blank" rel="noreferrer">API Docs</a>
+      </div>
+    </header>
+
+    <main class="dashboard-grid">
+      <!-- Panel 1: Connected Browser Profiles -->
+      <section class="panel panel-sessions">
+        <div class="panel-header">
+          <div>
+            <h2>Connected Browser Profiles</h2>
+            <p class="panel-subtitle">Live Chrome extension sessions over WebSocket</p>
+          </div>
+          <span id="sessionCountBadge" class="badge">0 active</span>
+        </div>
+        <div id="sessionsGrid" class="sessions-grid">
+          <div class="empty-state">Waiting for Chrome extension connection…</div>
+        </div>
+      </section>
+
+      <!-- Panel 2: Interactive Command & AI Snapshot Studio -->
+      <section class="panel panel-studio">
+        <div class="panel-header">
+          <div>
+            <h2>Interactive Command &amp; AI Snapshot Studio</h2>
+            <p class="panel-subtitle">Run quick commands, inspect @eN refs, and preview screenshots</p>
+          </div>
+          <span id="commandStatusBadge" class="badge badge-muted">Idle</span>
+        </div>
+
+        <div class="quick-actions">
+          <div class="navigate-bar">
+            <input
+              id="navigateUrlInput"
+              type="url"
+              value="https://example.com"
+              placeholder="https://example.com"
+              aria-label="Navigate URL"
+            />
+            <button id="btnNavigate" class="btn btn-primary" type="button">Navigate</button>
+          </div>
+          <div class="action-buttons">
+            <button id="btnSnapshotOverlay" class="btn btn-accent" type="button">AI Snapshot (Overlay)</button>
+            <button id="btnScreenshotViewport" class="btn btn-secondary" type="button">Screenshot (Viewport)</button>
+            <button id="btnScreenshotFull" class="btn btn-secondary" type="button">Screenshot (Full Page)</button>
+            <button id="btnConsoleLogs" class="btn btn-secondary" type="button">Console Logs</button>
+            <button id="btnNetworkLogs" class="btn btn-secondary" type="button">Network Logs</button>
+          </div>
+        </div>
+
+        <form id="customCommandForm" class="custom-command-form">
+          <div class="form-row">
+            <label class="field-group">
+              <span>Action</span>
+              <input id="customActionInput" type="text" value="get_url" placeholder="e.g. click, snapshot, evaluate" required />
+            </label>
+            <label class="field-group field-grow">
+              <span>JSON Params</span>
+              <input id="customParamsInput" type="text" value="{}" placeholder='{"selector": "h1"}' />
+            </label>
+            <button class="btn btn-primary" type="submit">Run Command</button>
+          </div>
+        </form>
+
+        <div class="studio-results">
+          <div class="studio-pane">
+            <div class="pane-title">
+              <span>Interactive Snapshot (@eN)</span>
+              <span id="snapshotCount" class="mono muted">0 elements</span>
+            </div>
+            <div class="table-wrap">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Ref</th>
+                    <th>Role / Tag</th>
+                    <th>Label / Text</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="snapshotTableBody">
+                  <tr>
+                    <td colspan="4" class="empty-cell">Run AI Snapshot to inspect interactive elements</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="studio-pane">
+            <div class="pane-title">
+              <span>Live Preview &amp; JSON Output</span>
+              <span id="previewMeta" class="mono muted">No capture yet</span>
+            </div>
+            <div id="previewFrame" class="preview-frame">
+              <span class="muted">Screenshot preview will appear here</span>
+            </div>
+            <pre id="commandOutputPre" class="json-output">{}</pre>
+          </div>
+        </div>
+      </section>
+
+      <!-- Panel 3: Saved Workflows -->
+      <section class="panel panel-workflows">
+        <div class="panel-header">
+          <div>
+            <h2>Saved Workflows</h2>
+            <p class="panel-subtitle">Reusable multi-step batch automations</p>
+          </div>
+          <span id="workflowCountBadge" class="badge">0 saved</span>
+        </div>
+
+        <div id="workflowsList" class="workflows-list">
+          <div class="empty-state">No saved workflows yet</div>
+        </div>
+
+        <form id="createWorkflowForm" class="workflow-form">
+          <h3>Create Workflow from Batch JSON</h3>
+          <label class="field-group">
+            <span>Name</span>
+            <input id="workflowNameInput" type="text" placeholder="e.g. Smoke Test Flow" required />
+          </label>
+          <label class="field-group">
+            <span>Description (optional)</span>
+            <input id="workflowDescInput" type="text" placeholder="Short summary of what this workflow checks" />
+          </label>
+          <label class="field-group">
+            <span>Steps JSON (array of BatchStep)</span>
+            <textarea id="workflowStepsInput" rows="4" spellcheck="false">[
+  { "action": "navigate", "params": { "url": "https://example.com" } },
+  { "action": "snapshot", "params": { "interactiveOnly": true, "overlay": true } }
+]</textarea>
+          </label>
+          <div class="form-actions">
+            <button class="btn btn-primary" type="submit">Save Workflow</button>
+            <span id="workflowFormMsg" class="muted"></span>
+          </div>
+        </form>
+      </section>
+
+      <!-- Panel 4: Live Execution Trace Timeline -->
+      <section class="panel panel-traces">
+        <div class="panel-header">
+          <div>
+            <h2>Live Execution Trace Timeline</h2>
+            <p class="panel-subtitle">Streamed in real time via SSE (/api/v2/events)</p>
+          </div>
+          <span id="traceCountBadge" class="badge">0 traces</span>
+        </div>
+
+        <div class="table-wrap table-wrap-tall">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Time</th>
+                <th>Action</th>
+                <th>Session</th>
+                <th>Duration</th>
+                <th>Status / Error</th>
+              </tr>
+            </thead>
+            <tbody id="tracesTableBody">
+              <tr>
+                <td colspan="5" class="empty-cell">No command traces recorded yet</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script type="module" src="./src/main.ts"></script>
+</body>
+</html>

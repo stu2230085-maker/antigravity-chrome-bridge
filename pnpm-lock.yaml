@@ -188,6 +188,22 @@ importers:
         specifier: ^3.1.3
         version: 3.2.7(@types/node@22.20.7)(tsx@4.23.15)
 
+  apps/dashboard:
+    dependencies:
+      '@antigravity-bridge/protocol':
+        specifier: workspace:*
+        version: link:../../packages/protocol
+    devDependencies:
+      typescript:
+        specifier: ^5.8.3
+        version: 5.9.3
+      vite:
+        specifier: ^6.3.5
+        version: 6.4.6(@types/node@22.20.7)(tsx@4.23.15)
+      vitest:
+        specifier: ^3.1.3
+        version: 3.2.7(@types/node@22.20.7)(tsx@4.23.15)
+
   apps/extension:
     dependencies:
       '@antigravity-bridge/protocol':
