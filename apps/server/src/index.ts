@@ -5,6 +5,12 @@ import { colors } from './logger.js';
 import { createBridgeSystem } from './server.js';
 
 export { loadConfig, type ServerConfig } from './config.js';
+export {
+  type PolicyCheckResult,
+  type SecurityConfig,
+  validateCommandPolicy,
+  validateUrlPolicy,
+} from './middleware/security.js';
 export { type BridgeSystem, createBridgeSystem } from './server.js';
 
 function printBanner(host: string, httpPort: number, wsPort: number): void {

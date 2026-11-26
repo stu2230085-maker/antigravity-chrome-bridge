@@ -1,5 +1,6 @@
 import type { SavedWorkflow, SessionSummary, TraceEntry } from '@antigravity-bridge/protocol';
 import {
+  buildEventsUrl,
   DashboardApiClient,
   extractImageDataUrl,
   extractSnapshotElements,
@@ -390,12 +391,20 @@ async function refreshWorkflows(): Promise<void> {
   }
 }
 
+let activeEventSource: EventSource | null = null;
+
 function connectSse(): void {
   if (typeof EventSource === 'undefined') {
     return;
   }
 
-  const es = new EventSource('/api/v2/events');
+  if (activeEventSource) {
+    activeEventSource.close();
+    activeEventSource = null;
+  }
+
+  const es = new EventSource(buildEventsUrl('', state.authToken));
+  activeEventSource = es;
 
   es.onopen = () => {
     state.sseConnected = true;
@@ -462,6 +471,9 @@ authTokenInput.addEventListener('input', () => {
     state.authToken,
     typeof localStorage !== 'undefined' ? localStorage : undefined,
   );
+  connectSse();
+  void refreshSnapshotPolling();
+  void refreshWorkflows();
 });
 
 byId<HTMLButtonElement>('btnNavigate').addEventListener('click', () => {

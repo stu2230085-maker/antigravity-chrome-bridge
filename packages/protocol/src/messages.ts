@@ -39,6 +39,7 @@ export const HelloMessageSchema = z.object({
   version: z.string().optional(),
   userAgent: z.string().optional(),
   timestamp: z.number().optional(),
+  token: z.string().optional(),
 });
 
 export type HelloMessage = z.infer<typeof HelloMessageSchema>;

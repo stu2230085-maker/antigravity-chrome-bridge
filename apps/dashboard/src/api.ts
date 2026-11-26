@@ -51,6 +51,15 @@ export function buildAuthHeaders(
   return headers;
 }
 
+export function buildEventsUrl(baseUrl = '', token?: string): string {
+  const cleanBase = baseUrl.replace(/\/+$/, '');
+  const trimmed = token?.trim();
+  if (!trimmed) {
+    return `${cleanBase}/api/v2/events`;
+  }
+  return `${cleanBase}/api/v2/events?token=${encodeURIComponent(trimmed)}`;
+}
+
 export function loadStoredAuthToken(storage?: Pick<Storage, 'getItem'>): string {
   try {
     return storage?.getItem(AUTH_TOKEN_STORAGE_KEY) ?? '';

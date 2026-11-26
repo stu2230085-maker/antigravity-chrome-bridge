@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import {
   AUTH_TOKEN_STORAGE_KEY,
   buildAuthHeaders,
+  buildEventsUrl,
   DashboardApiClient,
   extractImageDataUrl,
   extractSnapshotElements,
@@ -24,6 +25,11 @@ describe('@antigravity-bridge/dashboard API & formatting helpers', () => {
       'Content-Type': 'application/json',
       Authorization: 'Bearer secret-123',
     });
+    expect(buildEventsUrl('')).toBe('/api/v2/events');
+    expect(buildEventsUrl('', 'secret 123')).toBe('/api/v2/events?token=secret%20123');
+    expect(buildEventsUrl('http://127.0.0.1:8766/', 'tok')).toBe(
+      'http://127.0.0.1:8766/api/v2/events?token=tok',
+    );
 
     const store = new Map<string, string>();
     const mockStorage = {

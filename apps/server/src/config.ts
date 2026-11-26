@@ -15,6 +15,21 @@ export interface ServerConfig {
   workflowsFile?: string;
   dashboardDir?: string;
   quiet?: boolean;
+  authToken?: string;
+  wsRequireToken?: boolean;
+  allowedDomains?: string[];
+  blockedDomains?: string[];
+  allowFileUrls?: boolean;
+  rateLimitPerMin?: number;
+}
+
+function parseDomainList(raw?: string): string[] | undefined {
+  if (!raw) return undefined;
+  const patterns = raw
+    .split(',')
+    .map((item) => item.trim().toLowerCase())
+    .filter((item) => item.length > 0);
+  return patterns.length > 0 ? patterns : undefined;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
@@ -28,6 +43,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     env.TRACE_BUFFER_SIZE !== undefined ? Number(env.TRACE_BUFFER_SIZE) : DEFAULT_TRACE_BUFFER_SIZE;
   const workflowsFile = env.AGB_WORKFLOWS_FILE?.trim() || undefined;
   const dashboardDir = env.AGB_DASHBOARD_DIR?.trim() || undefined;
+  const authToken = env.AGB_AUTH_TOKEN?.trim() || undefined;
+  const wsRequireToken = env.AGB_WS_REQUIRE_TOKEN === 'true';
+  const allowedDomains = parseDomainList(env.AGB_ALLOWED_DOMAINS);
+  const blockedDomains = parseDomainList(env.AGB_BLOCKED_DOMAINS);
+  const allowFileUrls = env.AGB_ALLOW_FILE_URLS === 'true';
+  const rawRateLimit = Number(env.AGB_RATE_LIMIT_PER_MIN);
+  const rateLimitPerMin =
+    Number.isFinite(rawRateLimit) && rawRateLimit > 0 ? Math.floor(rawRateLimit) : 600;
 
   return {
     host: env.HOST || DEFAULT_HOST,
@@ -44,5 +67,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     workflowsFile,
     dashboardDir,
     quiet: env.QUIET === '1' || env.NODE_ENV === 'test',
+    authToken,
+    wsRequireToken,
+    allowedDomains,
+    blockedDomains,
+    allowFileUrls,
+    rateLimitPerMin,
   };
 }

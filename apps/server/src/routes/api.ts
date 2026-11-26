@@ -8,6 +8,12 @@ import {
 } from '@antigravity-bridge/protocol';
 import { Hono } from 'hono';
 import type { Logger } from '../logger.js';
+import {
+  createAuthMiddleware,
+  createRateLimitMiddleware,
+  type SecurityConfig,
+  validateCommandPolicy,
+} from '../middleware/security.js';
 import type { BridgeEventBus } from '../services/event-bus.js';
 import { NoConnectedSessionError, type SessionManager } from '../services/session-manager.js';
 import type { TraceStore } from '../services/trace-store.js';
@@ -91,6 +97,21 @@ function formatSseMessage(event: string, data: unknown): string {
   return `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
 }
 
+function findPolicyViolation(
+  steps: BatchStep[],
+  securityConfig: SecurityConfig,
+): { index: number; action: string; reason: string } | null {
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    if (!step) continue;
+    const check = validateCommandPolicy(step.action, step.params ?? {}, securityConfig);
+    if (!check.allowed) {
+      return { index: i, action: step.action, reason: check.reason };
+    }
+  }
+  return null;
+}
+
 export function createApiApp(
   sessionManager: SessionManager,
   traceStore: TraceStore,
@@ -98,9 +119,17 @@ export function createApiApp(
   workflowStore: WorkflowStore,
   eventBus: BridgeEventBus,
   dashboardDir?: string,
+  securityConfig: SecurityConfig = {},
 ): Hono {
   const app = new Hono();
   const resolvedDashboardDir = resolveDashboardDistDir(dashboardDir);
+
+  const rateLimiter = createRateLimitMiddleware(securityConfig);
+  const authMiddleware = createAuthMiddleware(securityConfig);
+
+  app.use('/command', rateLimiter, authMiddleware);
+  app.use('/status', rateLimiter, authMiddleware);
+  app.use('/api/v2/*', rateLimiter, authMiddleware);
 
   app.get('/', (c) => {
     return c.json({
@@ -153,6 +182,11 @@ export function createApiApp(
     }
 
     const { action, params = {}, sessionId } = parsed.data;
+    const policy = validateCommandPolicy(action, params, securityConfig);
+    if (!policy.allowed) {
+      logger.warn(`Policy rejected POST /command (${action}): ${policy.reason}`);
+      return c.json({ error: policy.reason }, 403);
+    }
 
     try {
       const outcome = await sessionManager.sendCommand(action, params, sessionId);
@@ -189,6 +223,21 @@ export function createApiApp(
     }
 
     const { steps, stopOnError = true, sessionId } = parsed.data;
+    const violation = findPolicyViolation(steps, securityConfig);
+    if (violation) {
+      logger.warn(
+        `Policy rejected POST /api/v2/batch step #${violation.index} (${violation.action}): ${violation.reason}`,
+      );
+      return c.json(
+        {
+          error: violation.reason,
+          stepIndex: violation.index,
+          action: violation.action,
+        },
+        403,
+      );
+    }
+
     if (!sessionManager.resolveTargetSession(sessionId)) {
       const msg = sessionId
         ? `Chrome extension session "${sessionId}" is not connected`
@@ -256,6 +305,21 @@ export function createApiApp(
     const parsed = WorkflowRunRequestSchema.safeParse(body);
     if (!parsed.success) {
       return c.json({ error: 'Invalid workflow run options' }, 400);
+    }
+
+    const violation = findPolicyViolation(workflow.steps, securityConfig);
+    if (violation) {
+      logger.warn(
+        `Policy rejected workflow "${id}" step #${violation.index} (${violation.action}): ${violation.reason}`,
+      );
+      return c.json(
+        {
+          error: violation.reason,
+          stepIndex: violation.index,
+          action: violation.action,
+        },
+        403,
+      );
     }
 
     const { sessionId, stopOnError = true } = parsed.data;

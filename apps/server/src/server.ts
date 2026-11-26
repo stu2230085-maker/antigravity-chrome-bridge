@@ -46,6 +46,7 @@ export function createBridgeSystem(partialConfig: Partial<ServerConfig> = {}): B
     workflowStore,
     eventBus,
     config.dashboardDir,
+    config,
   );
 
   let httpServer: NodeHttpServer | undefined;
@@ -73,7 +74,10 @@ export function createBridgeSystem(partialConfig: Partial<ServerConfig> = {}): B
       server.once('listening', onListening);
     });
 
-    attachWsHub(boundWss, sessionManager, logger);
+    attachWsHub(boundWss, sessionManager, logger, {
+      authToken: config.authToken,
+      wsRequireToken: config.wsRequireToken,
+    });
     system.wss = boundWss;
 
     const wsAddr = boundWss.address() as AddressInfo;
