@@ -301,6 +301,10 @@ body {
   flex-shrink: 0;
 }
 
+.btn-full {
+  width: 100%;
+}
+
 /* --- Info Card --- */
 .info-card {
   background: var(--bg-card);

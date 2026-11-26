@@ -106,6 +106,22 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message.type === 'open_side_panel') {
+    const windowId = typeof message.windowId === 'number' ? message.windowId : undefined;
+    if (chrome.sidePanel?.open && windowId !== undefined) {
+      void chrome.sidePanel
+        .open({ windowId })
+        .then(() => sendResponse({ ok: true }))
+        .catch((err) => {
+          const errorMsg = err instanceof Error ? err.message : String(err);
+          sendResponse({ ok: false, error: errorMsg });
+        });
+      return true;
+    }
+    sendResponse({ ok: false, error: 'sidePanel API unavailable' });
+    return true;
+  }
+
   if (message.type === 'recorder_start') {
     const tabId = typeof message.tabId === 'number' ? message.tabId : undefined;
     void recorderManager

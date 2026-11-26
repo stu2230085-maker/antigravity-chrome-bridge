@@ -21,8 +21,11 @@ const serverUrlInput = $<HTMLInputElement>('#serverUrl');
 const profileNameInput = $<HTMLInputElement>('#profileName');
 const connectBtn = $<HTMLButtonElement>('#connectBtn');
 const disconnectBtn = $<HTMLButtonElement>('#disconnectBtn');
+const openSidePanelBtn = $<HTMLButtonElement>('#openSidePanelBtn');
 const groupInfo = $<HTMLDivElement>('#groupInfo');
 const groupText = $<HTMLParagraphElement>('#groupText');
+
+let currentWindowId: number | undefined;
 
 function updateUI(status?: StatusPayload): void {
   const connected = Boolean(status?.connected);
@@ -73,6 +76,13 @@ async function init(): Promise<void> {
   profileNameInput.value =
     typeof stored.profileName === 'string' && stored.profileName ? stored.profileName : 'default';
 
+  try {
+    const win = await chrome.windows?.getCurrent();
+    currentWindowId = win?.id;
+  } catch {
+    currentWindowId = undefined;
+  }
+
   refreshStatus();
 }
 
@@ -105,6 +115,20 @@ connectBtn.addEventListener('click', () => {
 disconnectBtn.addEventListener('click', () => {
   chrome.runtime.sendMessage({ type: 'disconnect' }, () => {
     setTimeout(refreshStatus, 300);
+  });
+});
+
+openSidePanelBtn.addEventListener('click', () => {
+  if (chrome.sidePanel?.open && currentWindowId !== undefined) {
+    void chrome.sidePanel.open({ windowId: currentWindowId });
+    return;
+  }
+  chrome.windows?.getCurrent((win) => {
+    if (win?.id !== undefined && chrome.sidePanel?.open) {
+      void chrome.sidePanel.open({ windowId: win.id });
+    } else {
+      chrome.runtime.sendMessage({ type: 'open_side_panel', windowId: win?.id });
+    }
   });
 });
 

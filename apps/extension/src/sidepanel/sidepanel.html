@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Antigravity Side Panel</title>
+  <link rel="stylesheet" href="./sidepanel.css">
+</head>
+<body>
+  <div class="panel-shell">
+    <!-- Header -->
+    <header class="panel-header">
+      <div class="brand">
+        <div class="logo-icon">
+          <svg width="24" height="24" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+            <circle cx="14" cy="14" r="12" stroke="url(#sp-grad)" stroke-width="2.5" fill="none"/>
+            <circle cx="14" cy="14" r="5" fill="url(#sp-grad)"/>
+            <path d="M14 2 L14 6 M14 22 L14 26 M2 14 L6 14 M22 14 L26 14" stroke="url(#sp-grad)" stroke-width="2" stroke-linecap="round"/>
+            <defs>
+              <linearGradient id="sp-grad" x1="0" y1="0" x2="28" y2="28">
+                <stop offset="0%" stop-color="#6366f1"/>
+                <stop offset="100%" stop-color="#06b6d4"/>
+              </linearGradient>
+            </defs>
+          </svg>
+        </div>
+        <div>
+          <h1>Antigravity Studio</h1>
+          <span class="subtitle">Side Panel v2.0</span>
+        </div>
+      </div>
+
+      <div class="status-pill disconnected" id="statusPill">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">未接続</span>
+      </div>
+    </header>
+
+    <!-- Session Meta -->
+    <div class="meta-bar">
+      <span class="meta-chip" id="profileMeta">Profile: default</span>
+      <span class="meta-chip mono" id="sessionMeta">Session: -</span>
+    </div>
+
+    <!-- Navigation Tabs -->
+    <div class="tab-bar" role="tablist" aria-label="Side panel sections">
+      <button type="button" class="tab-btn active" role="tab" aria-selected="true" data-tab="feed">
+        Live Feed
+      </button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="recorder">
+        Action Recorder
+      </button>
+      <button type="button" class="tab-btn" role="tab" aria-selected="false" data-tab="runner">
+        Quick Runner
+      </button>
+    </div>
+
+    <!-- Tab 1: Live Feed -->
+    <section class="tab-panel active" id="tab-feed" role="tabpanel">
+      <div class="card">
+        <div class="card-title-row">
+          <span class="card-title">Quick AI Actions</span>
+        </div>
+        <div class="btn-grid">
+          <button type="button" class="btn btn-primary" id="btnSnapOverlay">
+            Run AI Snapshot (Overlay)
+          </button>
+          <button type="button" class="btn btn-secondary" id="btnClearMarks">
+            Clear Marks
+          </button>
+        </div>
+        <div class="feedback-line" id="feedFeedback"></div>
+      </div>
+
+      <div class="card fill-card">
+        <div class="card-title-row">
+          <span class="card-title">Live Command Feed</span>
+          <span class="count-badge" id="feedCount">0</span>
+        </div>
+        <ul class="feed-list" id="feedList">
+          <li class="empty-state">実行されたコマンドはここに表示されます</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Tab 2: Action Recorder -->
+    <section class="tab-panel" id="tab-recorder" role="tabpanel">
+      <div class="card">
+        <div class="card-title-row">
+          <span class="card-title">Recorder Controls</span>
+          <span class="rec-indicator" id="recIndicator">IDLE</span>
+        </div>
+        <div class="recorder-controls">
+          <button type="button" class="btn btn-danger" id="btnRecordStart">
+            Record
+          </button>
+          <button type="button" class="btn btn-secondary" id="btnRecordStop" disabled>
+            Stop
+          </button>
+          <button type="button" class="btn btn-secondary" id="btnRecordClear">
+            Clear
+          </button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title-row">
+          <span class="card-title">Recorded Steps</span>
+          <span class="count-badge" id="stepCount">0</span>
+        </div>
+        <ol class="step-list" id="stepList">
+          <li class="empty-state">「Record」を押してブラウザ操作を記録してください</li>
+        </ol>
+      </div>
+
+      <div class="card">
+        <div class="card-title-row">
+          <span class="card-title">Workflow Exporter</span>
+          <select id="exportFormat" class="select-field" aria-label="Export format">
+            <option value="batch_json">Batch JSON</option>
+            <option value="cli_script">agb CLI</option>
+            <option value="sdk_code">TypeScript SDK</option>
+          </select>
+        </div>
+        <textarea
+          id="exportPreview"
+          class="code-preview"
+          readonly
+          spellcheck="false"
+          aria-label="Exported workflow code"
+        ></textarea>
+        <div class="export-actions">
+          <button type="button" class="btn btn-primary" id="btnCopyCode">
+            Copy to Clipboard
+          </button>
+          <span class="copy-status" id="copyStatus"></span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Tab 3: Quick Runner -->
+    <section class="tab-panel" id="tab-runner" role="tabpanel">
+      <div class="card">
+        <div class="card-title-row">
+          <span class="card-title">Quick Command Runner</span>
+        </div>
+        <div class="field-group">
+          <label class="field-label" for="runnerAction">Action</label>
+          <select id="runnerAction" class="select-field full-width">
+            <option value="navigate">navigate</option>
+            <option value="snapshot">snapshot</option>
+            <option value="evaluate">evaluate</option>
+          </select>
+        </div>
+        <div class="field-group" id="runnerInputGroup">
+          <label class="field-label" id="runnerInputLabel" for="runnerInput">Target URL</label>
+          <textarea
+            id="runnerInput"
+            class="input-area"
+            rows="3"
+            placeholder="https://example.com"
+            spellcheck="false"
+          ></textarea>
+        </div>
+        <button type="button" class="btn btn-primary full-width" id="btnRunQuick">
+          Execute Command
+        </button>
+      </div>
+
+      <div class="card fill-card">
+        <div class="card-title-row">
+          <span class="card-title">Output</span>
+          <span class="meta-chip" id="runnerStatus">-</span>
+        </div>
+        <pre class="runner-output" id="runnerOutput">Ready.</pre>
+      </div>
+    </section>
+  </div>
+
+  <script type="module" src="./sidepanel.ts"></script>
+</body>
+</html>
