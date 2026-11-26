@@ -17,7 +17,10 @@
     "turbo:build": "turbo run build",
     "turbo:test": "turbo run test",
     "lint": "biome check .",
-    "lint:fix": "biome check --write ."
+    "lint:fix": "biome check --write .",
+    "package:extension": "pnpm --filter @antigravity-bridge/extension build && node scripts/package-extension.mjs",
+    "agb": "node packages/cli/dist/bin.js",
+    "mcp": "node packages/mcp/dist/bin.js"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",
