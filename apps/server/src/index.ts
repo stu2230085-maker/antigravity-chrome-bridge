@@ -1,6 +1,11 @@
+import { realpathSync } from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import { loadConfig } from './config.js';
 import { colors } from './logger.js';
 import { createBridgeSystem } from './server.js';
+
+export { loadConfig, type ServerConfig } from './config.js';
+export { type BridgeSystem, createBridgeSystem } from './server.js';
 
 function printBanner(host: string, httpPort: number, wsPort: number): void {
   console.log('');
@@ -72,4 +77,16 @@ async function main(): Promise<void> {
   process.on('SIGTERM', () => void shutdown());
 }
 
-void main();
+function isMainModule(): boolean {
+  const entry = process.argv[1];
+  if (!entry) return false;
+  try {
+    return import.meta.url === pathToFileURL(realpathSync(entry)).href;
+  } catch {
+    return false;
+  }
+}
+
+if (isMainModule()) {
+  void main();
+}
