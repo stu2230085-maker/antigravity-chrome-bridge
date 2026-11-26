@@ -6,7 +6,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178c6.svg)](https://www.typescriptlang.org/)
 [![MCP Ready](https://img.shields.io/badge/MCP-Ready-8b5cf6.svg)](https://modelcontextprotocol.io/)
 
-Antigravity / AIエージェント / スクリプトから **実在の Chrome ブラウザ** を自在に操作するための、フルスタック・ブラウザオートメーション基盤です。本家使えないとき用（でも v2.0 になって本家より多機能かもしれない）。
+Antigravity / AIエージェント / スクリプトから **実在の Chrome ブラウザ** を自在に操作するための、フルスタック・ブラウザオートメーション基盤です。本家使えないとき用。
 
 ---
 
@@ -374,7 +374,7 @@ pnpm package:extension
 - Chrome 116 以降が必要です（Manifest V3 Service Worker WebSocket keepalive 対応）
 - `chrome://` や Chrome ウェブストア等の内部ページでは拡張機能による操作が制限されます
 - スクリーンショットの `chrome.tabs.captureVisibleTab` は表示中タブを対象とします（`fullPage: true` は CDP 経由で全体撮影）
-- ドパガキ駆動開発の精神を継承しつつ、型安全性とテストだけはガチガチに固めています
+- ドパガキ駆動開発なのであんまり信用しないでください
 
 ## 📄 ライセンス
 
