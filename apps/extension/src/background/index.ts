@@ -1,6 +1,8 @@
 import { KEEPALIVE_ALARM_NAME } from '@antigravity-bridge/protocol';
+import { ensureTelemetryListeners } from '../engines/cdp/telemetry.js';
 import { WsClient } from './ws-client.js';
 
+ensureTelemetryListeners();
 const wsClient = new WsClient();
 
 chrome.alarms.onAlarm.addListener((alarm) => {

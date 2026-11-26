@@ -1,4 +1,9 @@
 import { cmdDragAndDrop, cmdPressKey, cmdUploadFile } from '../cdp/actions.js';
+import {
+  cmdGetConsoleLogs,
+  cmdGetNetworkLogs,
+  ensureTelemetryListeners,
+} from '../cdp/telemetry.js';
 import { cmdClearMarks, cmdSnapshot } from '../snapshot/index.js';
 import {
   cmdEvaluate,
@@ -34,6 +39,8 @@ export async function executeCommand(command: CommandRequest): Promise<CommandRe
   if (!command || typeof command.action !== 'string' || !command.action.trim()) {
     return { success: false, error: 'Invalid command: missing action' };
   }
+
+  ensureTelemetryListeners();
 
   const params =
     command.params && typeof command.params === 'object' && !Array.isArray(command.params)
@@ -101,6 +108,10 @@ export async function executeCommand(command: CommandRequest): Promise<CommandRe
       return await cmdDragAndDrop(params);
     case 'upload_file':
       return await cmdUploadFile(params);
+    case 'get_console_logs':
+      return await cmdGetConsoleLogs(params);
+    case 'get_network_logs':
+      return await cmdGetNetworkLogs(params);
     default:
       return { success: false, error: `Unknown action: ${command.action}` };
   }
