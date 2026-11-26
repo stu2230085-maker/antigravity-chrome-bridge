@@ -1,13 +1,49 @@
 import { KEEPALIVE_ALARM_NAME } from '@antigravity-bridge/protocol';
 import { ensureTelemetryListeners } from '../engines/cdp/telemetry.js';
+import { executeCommand } from '../engines/scripting/index.js';
+import { recorderManager } from '../recorder/recorder-manager.js';
+import type { ExportFormat, RecordedStep } from '../recorder/types.js';
 import { WsClient } from './ws-client.js';
 
 ensureTelemetryListeners();
 const wsClient = new WsClient();
 
+function isExportFormat(value: unknown): value is ExportFormat {
+  return value === 'batch_json' || value === 'cli_script' || value === 'sdk_code';
+}
+
+function isRecordedStep(value: unknown): value is RecordedStep {
+  if (!value || typeof value !== 'object') return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.timestamp === 'number' &&
+    (candidate.action === 'navigate' ||
+      candidate.action === 'click' ||
+      candidate.action === 'type' ||
+      candidate.action === 'select' ||
+      candidate.action === 'press_key')
+  );
+}
+
 chrome.alarms.onAlarm.addListener((alarm) => {
   if (alarm.name === KEEPALIVE_ALARM_NAME) {
     void wsClient.handleKeepaliveAlarm();
+  }
+});
+
+chrome.tabs?.onUpdated?.addListener((tabId, changeInfo, tab) => {
+  if (changeInfo.url) {
+    recorderManager.handleTabUpdated(tabId, changeInfo.url, tab.title);
+  }
+  if (changeInfo.status === 'complete') {
+    void recorderManager.reinjectOnNavigation(tabId);
+  }
+});
+
+chrome.tabs?.onRemoved?.addListener((tabId) => {
+  const state = recorderManager.getState();
+  if (state.isRecording && state.recordingTabId === tabId) {
+    void recorderManager.stopRecording();
   }
 });
 
@@ -67,6 +103,104 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return true;
     }
     sendResponse({ ok: false });
+    return true;
+  }
+
+  if (message.type === 'recorder_start') {
+    const tabId = typeof message.tabId === 'number' ? message.tabId : undefined;
+    void recorderManager
+      .startRecording(tabId)
+      .then((state) => {
+        sendResponse({ ok: true, ...state });
+      })
+      .catch((err) => {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        sendResponse({ ok: false, error: errorMsg });
+      });
+    return true;
+  }
+
+  if (message.type === 'recorder_stop') {
+    void recorderManager.stopRecording().then((state) => {
+      sendResponse({ ok: true, ...state });
+    });
+    return true;
+  }
+
+  if (message.type === 'recorder_clear') {
+    const state = recorderManager.clearSteps();
+    sendResponse({ ok: true, ...state });
+    return true;
+  }
+
+  if (message.type === 'recorder_get_state') {
+    sendResponse({ ok: true, ...recorderManager.getState() });
+    return true;
+  }
+
+  if (message.type === 'recorder_event') {
+    if (!isRecordedStep(message.step)) {
+      sendResponse({ ok: false, error: 'Invalid recorded step payload' });
+      return true;
+    }
+    const state = recorderManager.addStep(message.step);
+    sendResponse({ ok: true, ...state });
+    return true;
+  }
+
+  if (message.type === 'recorder_export') {
+    const format: ExportFormat = isExportFormat(message.format) ? message.format : 'batch_json';
+    const name =
+      typeof message.name === 'string' && message.name.trim() ? message.name.trim() : undefined;
+    const code = recorderManager.exportSteps(format, name);
+    sendResponse({ ok: true, format, code });
+    return true;
+  }
+
+  if (message.type === 'get_command_feed') {
+    sendResponse({ ok: true, history: recorderManager.getCommandHistory() });
+    return true;
+  }
+
+  if (message.type === 'run_command') {
+    if (typeof message.action !== 'string' || !message.action.trim()) {
+      sendResponse({ success: false, error: 'Missing command action' });
+      return true;
+    }
+    const commandId = `sp-${Date.now()}`;
+    const action = message.action;
+    const params =
+      message.params && typeof message.params === 'object' && !Array.isArray(message.params)
+        ? (message.params as Record<string, unknown>)
+        : {};
+    const startedAt = Date.now();
+
+    void executeCommand({ id: commandId, action, params })
+      .then((result) => {
+        recorderManager.recordCommandExecution({
+          id: commandId,
+          action,
+          success: result.success !== false,
+          durationMs: Date.now() - startedAt,
+          timestamp: Date.now(),
+          ...(typeof result.error === 'string' ? { error: result.error } : {}),
+          source: 'sidepanel',
+        });
+        sendResponse(result);
+      })
+      .catch((err) => {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        recorderManager.recordCommandExecution({
+          id: commandId,
+          action,
+          success: false,
+          durationMs: Date.now() - startedAt,
+          timestamp: Date.now(),
+          error: errorMsg,
+          source: 'sidepanel',
+        });
+        sendResponse({ success: false, error: errorMsg });
+      });
     return true;
   }
 

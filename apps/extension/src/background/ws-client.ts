@@ -5,6 +5,7 @@ import {
   KEEPALIVE_INTERVAL_MS,
 } from '@antigravity-bridge/protocol';
 import { executeCommand } from '../engines/scripting/index.js';
+import { recorderManager } from '../recorder/recorder-manager.js';
 import { getCurrentGroupId } from './tab-group.js';
 
 const BASE_RECONNECT_DELAY_MS = 2000;
@@ -161,6 +162,7 @@ export class WsClient {
             : {};
 
         console.log(`[Antigravity INFO] Command received: [${commandId}] ${action}`);
+        const startedAt = Date.now();
         let result: Record<string, unknown>;
         try {
           result = await executeCommand({ id: commandId, action, params });
@@ -170,6 +172,16 @@ export class WsClient {
           console.error(`[Antigravity ERROR] Command failed: [${commandId}]`, errorMsg);
           result = { success: false, error: errorMsg };
         }
+
+        recorderManager.recordCommandExecution({
+          id: commandId,
+          action,
+          success: result.success !== false,
+          durationMs: Date.now() - startedAt,
+          timestamp: Date.now(),
+          ...(typeof result.error === 'string' ? { error: result.error } : {}),
+          source: 'ws',
+        });
 
         if (this.ws && this.ws.readyState === WebSocket.OPEN) {
           this.ws.send(JSON.stringify({ id: commandId, ...result }));
