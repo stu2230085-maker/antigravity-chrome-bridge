@@ -1,0 +1,27 @@
+{
+  "name": "@antigravity-bridge/e2e",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Full-stack end-to-end test suite for Antigravity Chrome Bridge",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build": "tsc --noEmit -p tsconfig.json",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "biome check src"
+  },
+  "devDependencies": {
+    "@antigravity-bridge/cli": "workspace:*",
+    "@antigravity-bridge/mcp": "workspace:*",
+    "@antigravity-bridge/protocol": "workspace:*",
+    "@antigravity-bridge/sdk": "workspace:*",
+    "@antigravity-bridge/server": "workspace:*",
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@types/node": "^22.15.17",
+    "@types/ws": "^8.18.1",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.3",
+    "ws": "^8.18.2"
+  }
+}
