@@ -1,0 +1,11 @@
+export const DEFAULT_HOST = '127.0.0.1';
+export const DEFAULT_HTTP_PORT = 8766;
+export const DEFAULT_WS_PORT = 8767;
+export const DEFAULT_WS_URL = `ws://localhost:${DEFAULT_WS_PORT}`;
+export const DEFAULT_COMMAND_TIMEOUT_MS = 30_000;
+export const KEEPALIVE_INTERVAL_MS = 20_000;
+export const KEEPALIVE_ALARM_NAME = 'agb-keepalive';
+export const KEEPALIVE_ALARM_PERIOD_MINUTES = 0.5;
+export const TAB_GROUP_TITLE = '🤖 Antigravity';
+export const TAB_GROUP_COLOR = 'blue' as const;
+export const DEFAULT_TRACE_BUFFER_SIZE = 200;

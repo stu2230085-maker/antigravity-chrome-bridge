@@ -1,0 +1,28 @@
+{
+  "name": "antigravity-chrome-bridge-monorepo",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Antigravity Chrome Bridge v2.0 monorepo",
+  "license": "MIT",
+  "packageManager": "pnpm@12.21.0",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "start": "pnpm --filter @antigravity-bridge/server start",
+    "dev": "pnpm -r --parallel dev",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "turbo:build": "turbo run build",
+    "turbo:test": "turbo run test",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.0.0",
+    "turbo": "^2.5.0",
+    "typescript": "^5.8.3",
+    "vitest": "^3.1.3"
+  }
+}

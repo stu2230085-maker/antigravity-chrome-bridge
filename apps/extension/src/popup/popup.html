@@ -4,7 +4,7 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Antigravity Chrome Bridge</title>
-  <link rel="stylesheet" href="popup.css">
+  <link rel="stylesheet" href="./popup.css">
 </head>
 <body>
   <div class="container">
@@ -12,7 +12,7 @@
     <header class="header">
       <div class="logo-row">
         <div class="logo-icon">
-          <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+          <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
             <circle cx="14" cy="14" r="12" stroke="url(#grad)" stroke-width="2.5" fill="none"/>
             <circle cx="14" cy="14" r="5" fill="url(#grad)"/>
             <path d="M14 2 L14 6 M14 22 L14 26 M2 14 L6 14 M22 14 L26 14" stroke="url(#grad)" stroke-width="2" stroke-linecap="round"/>
@@ -38,6 +38,7 @@
         <span class="status-label" id="statusLabel">確認中...</span>
       </div>
       <div class="status-details" id="statusDetails"></div>
+      <div class="profile-badge" id="profileBadge" style="display:none;"></div>
     </div>
 
     <!-- Server URL Setting -->
@@ -54,16 +55,30 @@
       </div>
     </div>
 
+    <!-- Profile Name Setting -->
+    <div class="setting-group">
+      <label class="setting-label" for="profileName">プロファイル名</label>
+      <div class="input-row">
+        <input
+          type="text"
+          id="profileName"
+          class="input-field"
+          placeholder="default"
+          spellcheck="false"
+        />
+      </div>
+    </div>
+
     <!-- Action Buttons -->
     <div class="actions">
-      <button class="btn btn-primary" id="connectBtn">
-        <svg class="btn-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <button type="button" class="btn btn-primary" id="connectBtn">
+        <svg class="btn-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="M6 3L11 8L6 13" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         接続
       </button>
-      <button class="btn btn-secondary" id="disconnectBtn" disabled>
-        <svg class="btn-icon" width="16" height="16" viewBox="0 0 16 16" fill="none">
+      <button type="button" class="btn btn-secondary" id="disconnectBtn" disabled>
+        <svg class="btn-icon" width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <rect x="4" y="4" width="8" height="8" rx="1" fill="currentColor"/>
         </svg>
         切断
@@ -85,7 +100,7 @@
         <summary class="help-toggle">使い方</summary>
         <div class="help-content">
           <ol>
-            <li><code>server/</code>フォルダでブリッジサーバーを起動</li>
+            <li><code>pnpm start</code>でブリッジサーバーを起動</li>
             <li>「接続」ボタンをクリック</li>
             <li>Antigravityからコマンドを送信</li>
           </ol>
@@ -96,10 +111,10 @@
 
     <!-- Footer -->
     <footer class="footer">
-      <span>v1.0.0</span>
+      <span>v2.0.0</span>
     </footer>
   </div>
 
-  <script src="popup.js"></script>
+  <script type="module" src="./popup.ts"></script>
 </body>
 </html>

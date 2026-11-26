@@ -55,7 +55,7 @@
 body {
   width: 320px;
   min-height: 200px;
-  font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
   font-size: 13px;
   line-height: 1.5;
   background: var(--bg-primary);
@@ -87,8 +87,13 @@ body {
 }
 
 @keyframes pulse-glow {
-  0%, 100% { filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.3)); }
-  50%      { filter: drop-shadow(0 0 12px rgba(99, 102, 241, 0.6)); }
+  0%,
+  100% {
+    filter: drop-shadow(0 0 4px rgba(99, 102, 241, 0.3));
+  }
+  50% {
+    filter: drop-shadow(0 0 12px rgba(99, 102, 241, 0.6));
+  }
 }
 
 .logo-text h1 {
@@ -116,7 +121,9 @@ body {
   border-radius: var(--radius-md);
   padding: var(--space-md) var(--space-lg);
   backdrop-filter: blur(12px);
-  transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
+  transition:
+    border-color var(--transition-normal),
+    box-shadow var(--transition-normal);
 }
 
 .status-card.connected {
@@ -139,7 +146,9 @@ body {
   height: 10px;
   border-radius: 50%;
   background: var(--text-muted);
-  transition: background var(--transition-normal), box-shadow var(--transition-normal);
+  transition:
+    background var(--transition-normal),
+    box-shadow var(--transition-normal);
 }
 
 .status-dot.connected {
@@ -153,8 +162,13 @@ body {
 }
 
 @keyframes dot-pulse {
-  0%, 100% { box-shadow: 0 0 4px rgba(34, 197, 94, 0.3); }
-  50%      { box-shadow: 0 0 12px rgba(34, 197, 94, 0.6); }
+  0%,
+  100% {
+    box-shadow: 0 0 4px rgba(34, 197, 94, 0.3);
+  }
+  50% {
+    box-shadow: 0 0 12px rgba(34, 197, 94, 0.6);
+  }
 }
 
 .status-label {
@@ -166,6 +180,13 @@ body {
   margin-top: var(--space-xs);
   font-size: 11px;
   color: var(--text-secondary);
+}
+
+.profile-badge {
+  margin-top: var(--space-xs);
+  font-size: 11px;
+  color: var(--accent-cyan);
+  font-family: "Cascadia Code", "Consolas", monospace;
 }
 
 /* --- Settings --- */
@@ -195,10 +216,12 @@ body {
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
-  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-family: "Cascadia Code", "Consolas", monospace;
   font-size: 12px;
   outline: none;
-  transition: border-color var(--transition-fast), box-shadow var(--transition-fast);
+  transition:
+    border-color var(--transition-fast),
+    box-shadow var(--transition-fast);
 }
 
 .input-field:focus {
@@ -234,10 +257,10 @@ body {
 }
 
 .btn::after {
-  content: '';
+  content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(to bottom, rgba(255,255,255,0.05), transparent);
+  background: linear-gradient(to bottom, rgba(255, 255, 255, 0.05), transparent);
   pointer-events: none;
 }
 
@@ -288,8 +311,14 @@ body {
 }
 
 @keyframes slide-in {
-  from { opacity: 0; transform: translateY(-4px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .info-header {
@@ -343,7 +372,7 @@ details {
 }
 
 .help-toggle::before {
-  content: '▸';
+  content: "▸";
   display: inline-block;
   transition: transform var(--transition-fast);
   font-size: 10px;
@@ -376,7 +405,7 @@ details[open] .help-toggle::before {
   background: var(--bg-secondary);
   padding: 1px 5px;
   border-radius: 3px;
-  font-family: 'Cascadia Code', 'Consolas', monospace;
+  font-family: "Cascadia Code", "Consolas", monospace;
   font-size: 11px;
   color: var(--accent-cyan);
 }

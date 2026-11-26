@@ -1,0 +1,7 @@
+packages:
+  - "packages/*"
+  - "apps/*"
+
+minimumReleaseAge: 0
+allowBuilds:
+  esbuild: true
