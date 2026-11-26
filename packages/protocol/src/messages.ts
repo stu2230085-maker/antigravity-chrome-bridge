@@ -115,3 +115,99 @@ export const TraceEntrySchema = z.object({
 });
 
 export type TraceEntry = z.infer<typeof TraceEntrySchema>;
+
+// ============================================================================
+// HTTP API v2 Batch Execution Schemas
+// ============================================================================
+
+export const BatchStepSchema = z.object({
+  action: z.string().min(1),
+  params: z.record(z.unknown()).optional(),
+  delayMs: z.number().int().min(0).optional(),
+});
+
+export type BatchStep = z.infer<typeof BatchStepSchema>;
+
+export const BatchRequestSchema = z.object({
+  steps: z.array(BatchStepSchema).min(1),
+  stopOnError: z.boolean().optional(),
+  sessionId: z.string().min(1).optional(),
+});
+
+export type BatchRequest = z.infer<typeof BatchRequestSchema>;
+
+export const BatchStepResultSchema = z.object({
+  index: z.number().int().min(0),
+  action: z.string(),
+  success: z.boolean(),
+  id: z.string().optional(),
+  durationMs: z.number().min(0),
+  result: z.record(z.unknown()).optional(),
+  error: z.string().optional(),
+});
+
+export type BatchStepResult = z.infer<typeof BatchStepResultSchema>;
+
+export const BatchResponseSchema = z.object({
+  success: z.boolean(),
+  completedSteps: z.number().int().min(0),
+  totalSteps: z.number().int().min(0),
+  durationMs: z.number().min(0),
+  results: z.array(BatchStepResultSchema),
+});
+
+export type BatchResponse = z.infer<typeof BatchResponseSchema>;
+
+// ============================================================================
+// Snapshot & Telemetry Data Schemas
+// ============================================================================
+
+export const ElementRectSchema = z.object({
+  x: z.number(),
+  y: z.number(),
+  width: z.number(),
+  height: z.number(),
+});
+
+export type ElementRect = z.infer<typeof ElementRectSchema>;
+
+export const SnapshotElementSchema = z.object({
+  ref: z.string(),
+  role: z.string(),
+  tagName: z.string(),
+  label: z.string(),
+  text: z.string(),
+  value: z.string().optional(),
+  placeholder: z.string().optional(),
+  href: z.string().optional(),
+  checked: z.boolean().optional(),
+  disabled: z.boolean().optional(),
+  visible: z.boolean(),
+  rect: ElementRectSchema,
+});
+
+export type SnapshotElement = z.infer<typeof SnapshotElementSchema>;
+
+export const ConsoleLogEntrySchema = z.object({
+  level: z.enum(['error', 'warn', 'info', 'log']),
+  text: z.string(),
+  timestamp: z.number(),
+  url: z.string().optional(),
+  lineNumber: z.number().optional(),
+});
+
+export type ConsoleLogEntry = z.infer<typeof ConsoleLogEntrySchema>;
+
+export const NetworkLogEntrySchema = z.object({
+  requestId: z.string(),
+  url: z.string(),
+  method: z.string(),
+  status: z.number().optional(),
+  statusText: z.string().optional(),
+  type: z.string().optional(),
+  failed: z.boolean().optional(),
+  errorText: z.string().optional(),
+  timestamp: z.number(),
+});
+
+export type NetworkLogEntry = z.infer<typeof NetworkLogEntrySchema>;

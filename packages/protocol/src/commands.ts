@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 // ============================================================================
-// Action names (25 v1 actions preserved 100%)
+// Action names (25 v1 actions + 7 v2 actions = 32 total)
 // ============================================================================
 
 export const COMMAND_ACTIONS = [
@@ -30,6 +30,14 @@ export const COMMAND_ACTIONS = [
   'iframe_get_text',
   'evaluate',
   'wait_for',
+  // v2 actions
+  'snapshot',
+  'clear_marks',
+  'press_key',
+  'drag_and_drop',
+  'upload_file',
+  'get_console_logs',
+  'get_network_logs',
 ] as const;
 
 export const CommandActionSchema = z.enum(COMMAND_ACTIONS);
@@ -42,6 +50,15 @@ export type CommandAction = z.infer<typeof CommandActionSchema>;
 const TabTargetParams = z.object({
   tabId: z.number().int().positive().optional(),
 });
+
+export const ExecutionEngineSchema = z.enum(['auto', 'scripting', 'cdp']);
+export type ExecutionEngine = z.infer<typeof ExecutionEngineSchema>;
+
+export const KeyModifierSchema = z.enum(['Alt', 'Control', 'Meta', 'Shift']);
+export type KeyModifier = z.infer<typeof KeyModifierSchema>;
+
+export const ConsoleLogLevelSchema = z.enum(['all', 'error', 'warn', 'info', 'log']);
+export type ConsoleLogLevel = z.infer<typeof ConsoleLogLevelSchema>;
 
 // ============================================================================
 // Individual Command Param Schemas
@@ -67,10 +84,16 @@ export const ReloadParamsSchema = TabTargetParams;
 export const GetUrlParamsSchema = TabTargetParams;
 export const GetTabsParamsSchema = z.object({});
 
+const SelectorOrRefCheck = (val: { selector?: string; ref?: string }) =>
+  Boolean(val.selector || val.ref);
+const SelectorOrRefMessage = { message: 'Either selector or ref is required' };
+
 export const ClickParamsSchema = TabTargetParams.extend({
-  selector: z.string().min(1),
+  selector: z.string().min(1).optional(),
+  ref: z.string().min(1).optional(),
+  engine: ExecutionEngineSchema.optional(),
   allFrames: z.boolean().optional(),
-});
+}).refine(SelectorOrRefCheck, SelectorOrRefMessage);
 
 export const ClickAtParamsSchema = TabTargetParams.extend({
   x: z.number(),
@@ -79,28 +102,36 @@ export const ClickAtParamsSchema = TabTargetParams.extend({
 });
 
 export const TypeParamsSchema = TabTargetParams.extend({
-  selector: z.string().min(1),
+  selector: z.string().min(1).optional(),
+  ref: z.string().min(1).optional(),
   text: z.string(),
   clear: z.boolean().optional(),
+  engine: ExecutionEngineSchema.optional(),
   allFrames: z.boolean().optional(),
-});
+}).refine(SelectorOrRefCheck, SelectorOrRefMessage);
 
 export const HoverParamsSchema = TabTargetParams.extend({
-  selector: z.string().min(1),
+  selector: z.string().min(1).optional(),
+  ref: z.string().min(1).optional(),
+  engine: ExecutionEngineSchema.optional(),
   allFrames: z.boolean().optional(),
-});
+}).refine(SelectorOrRefCheck, SelectorOrRefMessage);
 
 export const SelectParamsSchema = TabTargetParams.extend({
-  selector: z.string().min(1),
+  selector: z.string().min(1).optional(),
+  ref: z.string().min(1).optional(),
   value: z.string(),
-});
+  engine: ExecutionEngineSchema.optional(),
+}).refine(SelectorOrRefCheck, SelectorOrRefMessage);
 
 export const ScrollDirectionSchema = z.enum(['up', 'down', 'left', 'right']);
 
 export const ScrollParamsSchema = TabTargetParams.extend({
   x: z.number().optional(),
   y: z.number().optional(),
-  selector: z.string().optional(),
+  selector: z.string().min(1).optional(),
+  ref: z.string().min(1).optional(),
+  engine: ExecutionEngineSchema.optional(),
   direction: z.union([ScrollDirectionSchema, z.string()]).optional(),
   amount: z.number().optional(),
   allFrames: z.boolean().optional(),
@@ -125,6 +156,10 @@ export const GetElementsParamsSchema = TabTargetParams.extend({
 export const ScreenshotParamsSchema = TabTargetParams.extend({
   format: z.enum(['png', 'jpeg']).optional(),
   quality: z.number().int().min(0).max(100).optional(),
+  fullPage: z.boolean().optional(),
+  selector: z.string().min(1).optional(),
+  ref: z.string().min(1).optional(),
+  markOverlay: z.boolean().optional(),
 });
 
 export const IframeClickParamsSchema = TabTargetParams.extend({
@@ -159,6 +194,67 @@ export const WaitForParamsSchema = TabTargetParams.extend({
 });
 
 // ============================================================================
+// v2 Command Param Schemas
+// ============================================================================
+
+export const SnapshotParamsSchema = TabTargetParams.extend({
+  interactiveOnly: z.boolean().optional(),
+  markOverlay: z.boolean().optional(),
+  maxElements: z.number().int().positive().optional(),
+});
+
+export const ClearMarksParamsSchema = TabTargetParams;
+
+export const PressKeyParamsSchema = TabTargetParams.extend({
+  key: z.string().min(1),
+  modifiers: z.array(KeyModifierSchema).optional(),
+  selector: z.string().min(1).optional(),
+  ref: z.string().min(1).optional(),
+  text: z.string().optional(),
+});
+
+export const DragAndDropParamsSchema = TabTargetParams.extend({
+  sourceSelector: z.string().min(1).optional(),
+  sourceRef: z.string().min(1).optional(),
+  targetSelector: z.string().min(1).optional(),
+  targetRef: z.string().min(1).optional(),
+  sourceX: z.number().optional(),
+  sourceY: z.number().optional(),
+  targetX: z.number().optional(),
+  targetY: z.number().optional(),
+}).refine(
+  (val) => {
+    const hasSource =
+      Boolean(val.sourceSelector || val.sourceRef) ||
+      (val.sourceX !== undefined && val.sourceY !== undefined);
+    const hasTarget =
+      Boolean(val.targetSelector || val.targetRef) ||
+      (val.targetX !== undefined && val.targetY !== undefined);
+    return hasSource && hasTarget;
+  },
+  { message: 'Source and target selectors/refs or coordinates are required' },
+);
+
+export const UploadFileParamsSchema = TabTargetParams.extend({
+  selector: z.string().min(1).optional(),
+  ref: z.string().min(1).optional(),
+  files: z.array(z.string().min(1)).min(1),
+}).refine(SelectorOrRefCheck, SelectorOrRefMessage);
+
+export const GetConsoleLogsParamsSchema = TabTargetParams.extend({
+  level: ConsoleLogLevelSchema.optional(),
+  limit: z.number().int().positive().optional(),
+  clear: z.boolean().optional(),
+});
+
+export const GetNetworkLogsParamsSchema = TabTargetParams.extend({
+  urlPattern: z.string().min(1).optional(),
+  errorsOnly: z.boolean().optional(),
+  limit: z.number().int().positive().optional(),
+  clear: z.boolean().optional(),
+});
+
+// ============================================================================
 // Discriminated Union of Commands + Loose v1 Wire Schema
 // ============================================================================
 
@@ -188,6 +284,13 @@ export const CommandParamsSchemas = {
   iframe_get_text: IframeGetTextParamsSchema,
   evaluate: EvaluateParamsSchema,
   wait_for: WaitForParamsSchema,
+  snapshot: SnapshotParamsSchema,
+  clear_marks: ClearMarksParamsSchema,
+  press_key: PressKeyParamsSchema,
+  drag_and_drop: DragAndDropParamsSchema,
+  upload_file: UploadFileParamsSchema,
+  get_console_logs: GetConsoleLogsParamsSchema,
+  get_network_logs: GetNetworkLogsParamsSchema,
 } as const;
 
 export const TypedCommandSchema = z.discriminatedUnion('action', [
@@ -216,6 +319,19 @@ export const TypedCommandSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('iframe_get_text'), params: IframeGetTextParamsSchema.default({}) }),
   z.object({ action: z.literal('evaluate'), params: EvaluateParamsSchema }),
   z.object({ action: z.literal('wait_for'), params: WaitForParamsSchema }),
+  z.object({ action: z.literal('snapshot'), params: SnapshotParamsSchema.default({}) }),
+  z.object({ action: z.literal('clear_marks'), params: ClearMarksParamsSchema.default({}) }),
+  z.object({ action: z.literal('press_key'), params: PressKeyParamsSchema }),
+  z.object({ action: z.literal('drag_and_drop'), params: DragAndDropParamsSchema }),
+  z.object({ action: z.literal('upload_file'), params: UploadFileParamsSchema }),
+  z.object({
+    action: z.literal('get_console_logs'),
+    params: GetConsoleLogsParamsSchema.default({}),
+  }),
+  z.object({
+    action: z.literal('get_network_logs'),
+    params: GetNetworkLogsParamsSchema.default({}),
+  }),
 ]);
 
 export type TypedCommand = z.infer<typeof TypedCommandSchema>;
