@@ -1,3 +1,4 @@
+import { cmdDragAndDrop, cmdPressKey, cmdUploadFile } from '../cdp/actions.js';
 import { cmdClearMarks, cmdSnapshot } from '../snapshot/index.js';
 import {
   cmdEvaluate,
@@ -94,6 +95,12 @@ export async function executeCommand(command: CommandRequest): Promise<CommandRe
       return await cmdSnapshot(params);
     case 'clear_marks':
       return await cmdClearMarks(params);
+    case 'press_key':
+      return await cmdPressKey(params);
+    case 'drag_and_drop':
+      return await cmdDragAndDrop(params);
+    case 'upload_file':
+      return await cmdUploadFile(params);
     default:
       return { success: false, error: `Unknown action: ${command.action}` };
   }

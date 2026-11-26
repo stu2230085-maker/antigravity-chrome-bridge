@@ -1,4 +1,6 @@
 import { resolveTab } from '../../background/tab-group.js';
+import { cdpScreenshot } from '../cdp/actions.js';
+import { resolveSelector } from '../snapshot/index.js';
 import type { CommandResult } from './types.js';
 
 interface FoundOutcome {
@@ -8,6 +10,10 @@ interface FoundOutcome {
 }
 
 export async function cmdScreenshot(params: Record<string, unknown>): Promise<CommandResult> {
+  if (params.fullPage || params.markOverlay || resolveSelector(params) || params.engine === 'cdp') {
+    return await cdpScreenshot(params);
+  }
+
   const tab = await resolveTab(params);
   if (tab.id === undefined) return { success: false, error: 'Resolved tab has no ID' };
 

@@ -11,7 +11,9 @@
     "tabGroups",
     "alarms",
     "storage",
-    "webNavigation"
+    "webNavigation",
+    "debugger",
+    "sidePanel"
   ],
   "host_permissions": ["<all_urls>", "http://localhost/*", "ws://localhost/*"],
   "background": {

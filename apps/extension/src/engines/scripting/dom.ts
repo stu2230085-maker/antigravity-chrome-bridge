@@ -1,4 +1,5 @@
 import { resolveTab } from '../../background/tab-group.js';
+import { cdpClick, cdpType } from '../cdp/actions.js';
 import { resolveSelector } from '../snapshot/index.js';
 import type { CommandResult } from './types.js';
 
@@ -9,6 +10,10 @@ interface FoundOutcome {
 }
 
 export async function cmdClick(params: Record<string, unknown>): Promise<CommandResult> {
+  if (params.engine === 'cdp') {
+    return await cdpClick(params);
+  }
+
   const selector = resolveSelector(params);
   const allFrames = Boolean(params.allFrames);
   if (!selector) return { success: false, error: 'Missing parameter: selector' };
@@ -96,6 +101,10 @@ export async function cmdClickAt(params: Record<string, unknown>): Promise<Comma
 }
 
 export async function cmdType(params: Record<string, unknown>): Promise<CommandResult> {
+  if (params.engine === 'cdp') {
+    return await cdpType(params);
+  }
+
   const selector = resolveSelector(params);
   const text = params.text !== undefined ? String(params.text) : undefined;
   const clear = params.clear === undefined ? true : Boolean(params.clear);
