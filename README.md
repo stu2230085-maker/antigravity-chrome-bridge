@@ -1,188 +1,380 @@
-# Antigravity Chrome Bridge
+# Antigravity Chrome Bridge v2.0
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Chrome](https://img.shields.io/badge/Chrome-116%2B-brightgreen.svg)](https://www.google.com/chrome/)
-[![Manifest V3](https://img.shields.io/badge/Manifest-V3-orange.svg)](https://developer.chrome.com/docs/extensions/mv3/intro/)
-[![Node.js](https://img.shields.io/badge/Node.js-18%2B-339933.svg)](https://nodejs.org/)
+[![Chrome](https://img.shields.io/badge/Chrome-116%2B%20MV3-brightgreen.svg)](https://www.google.com/chrome/)
+[![Node.js](https://img.shields.io/badge/Node.js-20%2B-339933.svg)](https://nodejs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178c6.svg)](https://www.typescriptlang.org/)
+[![MCP Ready](https://img.shields.io/badge/MCP-Ready-8b5cf6.svg)](https://modelcontextprotocol.io/)
 
-AntigravityからChromeブラウザを操作するための拡張機能とブリッジサーバーのセットです。本家使えないとき用
+Antigravity / AIエージェント / スクリプトから **実在の Chrome ブラウザ** を自在に操作するための、フルスタック・ブラウザオートメーション基盤です。本家使えないとき用（でも v2.0 になって本家より多機能かもしれない）。
 
-## 概要
+---
+
+## ✨ v2.0 ハイライト
+
+- **🎯 AI Snapshot (`@eN`) & Set-of-Mark**: ページ内の操作可能要素を抽出し、`@e1`・`@e2` などの安定した参照IDを付与。`--overlay` で画面上に視覚バッジを描画したスクリーンショットも取得でき、AIエージェントが迷わずクリック・入力できます。
+- **⚡ Dual Engine (`Scripting + CDP`)**: 通常の高速な `chrome.scripting` エンジンに加え、`chrome.debugger` (CDP) エンジンを自動/明示的に切り替え可能。信頼済みキーボード入力 (`press_key`)、ドラッグ＆ドロップ、ファイルアップロード、フルページスクリーンショット、コンソール/ネットワークログ監視に対応。
+- **🔌 MCP / CLI (`agb`) / TypeScript SDK / HTTP API**: AIクライアント向けの公式 MCP サーバー (`@antigravity-bridge/mcp`)、軽快な CLI (`agb`)、型安全な SDK (`@antigravity-bridge/sdk`)、v1完全互換の HTTP API の4系統を提供。
+- **🎬 Chrome Side Panel & Action Recorder**: 拡張機能の Side Panel に **Antigravity Studio** を内蔵。Live Command Feed のリアルタイム監視に加え、ブラウザ操作を録画して **Batch JSON / `agb` CLI / TypeScript SDK** コードへ即座にエクスポートできます。
+- **🖥️ Web Control Center (`/ui`) & OpenAPI (`/docs`)**: サーバー起動と同時に `http://localhost:8766/ui` でリアルタイムダッシュボードが利用可能。SSE による実行トレース配信や保存済みワークフローのワンクリック実行に対応。
+- **🛡️ Multi-Profile & Security**: 複数ブラウザプロファイルの `sessionId` ルーティング、Bearer トークン認証、ドメイン許可/ブロックポリシー、`file://` アクセス制御、スライディングウィンドウ・レート制限を標準装備。
+
+---
+
+## 🏗️ システム構成 & モノレポ構成
+
+### アーキテクチャ
+
+```mermaid
+flowchart LR
+  subgraph Clients["操作クライアント"]
+    MCP["MCP Server (@antigravity-bridge/mcp)"]
+    CLI["CLI (agb)"]
+    SDK["TypeScript SDK"]
+    HTTP["HTTP / curl / Antigravity"]
+    UI["Web Control Center (/ui)"]
+  end
+
+  subgraph Bridge["Bridge Server (Hono + Node.js :8766 / WS :8767)"]
+    API["REST & v2 API / SSE / OpenAPI"]
+    SEC["Auth / Domain Policy / Rate Limit"]
+    HUB["WebSocket Multi-Session Hub"]
+  end
+
+  subgraph Chrome["Chrome Extension (MV3)"]
+    SW["Service Worker & Router"]
+    ENG1["Scripting Engine (DOM / Snapshot / SoM)"]
+    ENG2["CDP Engine (chrome.debugger)"]
+    SP["Side Panel & Action Recorder"]
+  end
+
+  MCP --> API
+  CLI --> API
+  SDK --> API
+  HTTP --> API
+  UI --> API
+  API --> SEC --> HUB
+  HUB <-->|WebSocket| SW
+  SW --> ENG1
+  SW --> ENG2
+  SW <--> SP
+```
+
+### モノレポ構成
 
 ```text
-Antigravity ──HTTP──▶ ブリッジサーバー ──WebSocket──▶ Chrome拡張 ──▶ ブラウザ操作
-                        (Node.js)                     (MV3)
+antigravity-chrome-bridge/
+├── apps/
+│   ├── extension/       # Chrome MV3 拡張機能 (Background, Scripting/CDP Engines, Popup, Side Panel, Action Recorder)
+│   ├── server/          # Hono HTTP/SSE + WebSocket ブリッジサーバー (Security, Traces, Workflows, OpenAPI)
+│   └── dashboard/       # Web Control Center (/ui として server にバンドル配信)
+├── packages/
+│   ├── protocol/        # Zod スキーマ・型定義・定数 (全32コマンド / Batch / Workflow / Session / Trace)
+│   ├── sdk/             # @antigravity-bridge/sdk (AntigravityBridgeClient)
+│   ├── cli/             # @antigravity-bridge/cli (agb コマンド)
+│   └── mcp/             # @antigravity-bridge/mcp (公式 Model Context Protocol サーバー)
+├── e2e/                 # フルスタック E2E テストスイート (Server + Mock Extension + SDK/CLI/MCP)
+├── scripts/             # ビルド・パッケージング用スクリプト (package-extension.mjs)
+└── .github/workflows/   # GitHub Actions CI/CD ワークフロー
 ```
 
-- **ブリッジサーバー**: Antigravityからのコマンドを受け取り、Chrome拡張に中継
-- **Chrome拡張**: ブラウザ内でコマンドを実行（クリック、入力、スクロール、スクリーンショットなど）
-- **タブグループ**: 操作は自動的に「🤖 Antigravity」タブグループ内で行われます
+---
 
-## セットアップ
+## 🚀 クイックスタート
 
-### 1. ブリッジサーバーの起動
+### 1. インストール・ビルド・サーバー起動
 
 ```bash
-cd server
-npm install
-npm start
+pnpm install
+pnpm build
+pnpm start
 ```
 
-または `server/start.bat` をダブルクリック（Windows）。
+起動すると以下のエンドポイントが利用可能になります：
+- **HTTP API**: `http://127.0.0.1:8766`
+- **WebSocket (Chrome拡張接続用)**: `ws://127.0.0.1:8767`
+- **Web Control Center**: `http://127.0.0.1:8766/ui`
+- **OpenAPI / Swagger UI**: `http://127.0.0.1:8766/docs`
 
-サーバーが起動すると以下が利用可能になります：
-- **WebSocket**: `ws://localhost:8767` (Chrome拡張用)
-- **HTTP API**: `http://localhost:8766` (Antigravity用)
+### 2. Chrome 拡張機能の読み込み
 
-### 2. Chrome拡張のインストール
+1. Chrome で `chrome://extensions/` を開く
+2. 右上の **「デベロッパーモード」** を ON にする
+3. **「パッケージ化されていない拡張機能を読み込む」** をクリック
+4. ビルド済みの `apps/extension/dist` フォルダを選択
+5. 拡張機能アイコンをクリックし、ステータスが **接続済み** になることを確認
 
-1. Chromeで `chrome://extensions/` を開く
-2. 右上の「デベロッパーモード」をON
-3. 「パッケージ化されていない拡張機能を読み込む」をクリック
-4. `extension/` フォルダを選択
-5. 拡張機能のアイコンをクリックし、接続状態を確認
+> 💡 配布用 ZIP を作成したい場合は `pnpm package:extension` を実行すると `release/antigravity-chrome-bridge-extension-v2.0.0.zip` が生成されます。
 
-### 3. Antigravityから使う
+### 3. Web Control Center & OpenAPI Docs
 
-Antigravityの `run_command` ツールなどからHTTPリクエストを送信します：
+- **Web Control Center (`http://localhost:8766/ui`)**: 接続中のブラウザプロファイル一覧、AI Snapshot (`@eN`) のインタラクティブ操作、スクリーンショットプレビュー、保存済みワークフロー管理、SSE によるリアルタイム実行トレースをブラウザ上で確認できます。
+- **OpenAPI Docs (`http://localhost:8766/docs`)**: 全 API エンドポイントのインタラクティブな仕様書（`/openapi.json`）を閲覧できます。
+
+---
+
+## 🎮 4つの操作インターフェース
+
+### 1. 専用 CLI (`agb`)
+
+ビルド後、リポジトリルートから `pnpm agb ...` で実行できます（グローバルリンク後は `agb ...`）。
 
 ```bash
-# 接続状態の確認
-curl http://localhost:8766/status
+# 接続状態とセッション一覧の確認
+pnpm agb status
+pnpm agb sessions
 
-# ページに移動
-curl -X POST http://localhost:8766/command -H "Content-Type: application/json" -d "{\"action\": \"navigate\", \"params\": {\"url\": \"https://example.com\"}}"
+# URL へ移動
+pnpm agb nav https://example.com
 
-# 要素をクリック
-curl -X POST http://localhost:8766/command -H "Content-Type: application/json" -d "{\"action\": \"click\", \"params\": {\"selector\": \"#submit-btn\"}}"
+# AI Snapshot を取得（--overlay で画面上に @eN バッジを描画＋画像情報付き）
+pnpm agb snap --overlay
 
-# テキスト入力
-curl -X POST http://localhost:8766/command -H "Content-Type: application/json" -d "{\"action\": \"type\", \"params\": {\"selector\": \"input[name=search]\", \"text\": \"検索ワード\"}}"
+# @eN 参照ID または CSS セレクタで操作
+pnpm agb click @e1
+pnpm agb type @e2 "Antigravity"
+pnpm agb key Enter
+
+# スクリーンショット保存（--full でフルページ）
+pnpm agb shot page.png --full
+
+# コンソール・ネットワークログ取得 / バッチ実行
+pnpm agb logs --errors
+pnpm agb logs --network
+pnpm agb batch workflow.json
 ```
 
-## 🔌 HTTP API エンドポイント
+<details>
+<summary>CLI グローバルオプション & 全サブコマンド</summary>
+
+- グローバルオプション: `-u, --url <httpUrl>`, `-s, --session <id>`, `-t, --token <token>`, `-j, --json`, `-h, --help`
+- サブコマンド: `status`, `sessions`, `traces`, `nav`, `snap`, `click`, `type`, `key`, `shot`, `eval`, `text`, `tabs`, `logs`, `batch`
+- 環境変数: `AGB_URL`, `AGB_SESSION`, `AGB_TOKEN` にも対応しています。
+
+</details>
+
+### 2. 公式 MCP サーバー (`@antigravity-bridge/mcp`)
+
+Claude Desktop / Cursor / Antigravity などの MCP 対応クライアントに設定を追加します（先にブリッジサーバーと Chrome 拡張を起動しておいてください）。
+
+```json
+{
+  "mcpServers": {
+    "antigravity-chrome-bridge": {
+      "command": "node",
+      "args": ["/absolute/path/to/antigravity-chrome-bridge/packages/mcp/dist/bin.js"],
+      "env": {
+        "AGB_URL": "http://127.0.0.1:8766",
+        "AGB_TOKEN": ""
+      }
+    }
+  }
+}
+```
+
+#### 提供 MCP ツール一覧 (13ツール)
+
+| ツール名 | 説明 |
+|:---|:---|
+| `browser_status` | ブリッジ接続状態・セッション一覧・直近トレース取得 |
+| `browser_navigate` | 指定 URL へ遷移 |
+| `browser_snapshot` | AI DOM Snapshot (`@eN`) 取得（`markOverlay: true` で画像も返却） |
+| `browser_click` | `@eN` 参照または CSS セレクタをクリック (`auto`/`scripting`/`cdp`) |
+| `browser_type` | `@eN` 参照または CSS セレクタへテキスト入力 |
+| `browser_press_key` | CDP 経由の信頼済みキー入力（修飾キー対応） |
+| `browser_scroll` | 方向・座標・要素指定でスクロール |
+| `browser_screenshot` | Viewport / フルページ / 要素クロップのスクリーンショット取得 |
+| `browser_evaluate` | タブ内で JavaScript を実行 |
+| `browser_tabs` | 開いているタブとタブグループ一覧を取得 |
+| `browser_console_logs` | CDP で収集したコンソールログを取得 |
+| `browser_network_logs` | CDP で収集したネットワーク通信ログを取得 |
+| `browser_batch` | 複数コマンドを順次実行 (`POST /api/v2/batch`) |
+
+### 3. TypeScript SDK (`@antigravity-bridge/sdk`)
+
+```ts
+import { AntigravityBridgeClient } from '@antigravity-bridge/sdk';
+
+const client = new AntigravityBridgeClient({
+  baseUrl: 'http://127.0.0.1:8766',
+  // authToken: process.env.AGB_AUTH_TOKEN,
+  // sessionId: 'default-xxxx',
+});
+
+await client.navigate('https://example.com');
+
+const snap = await client.snapshot({ interactiveOnly: true, markOverlay: true });
+console.log(snap.elements); // [{ ref: '@e1', role: 'link', text: 'More information...', ... }]
+
+await client.click('@e1', { engine: 'cdp' });
+const shot = await client.screenshot({ fullPage: true });
+```
+
+### 4. HTTP API (v1 完全互換 & v2 拡張)
 
 | メソッド | パス | 説明 |
 |:---|:---|:---|
-| `POST` | `/command` | Chrome拡張へコマンドを送信し、実行結果を返す |
-| `GET` | `/status` | 拡張機能の接続状態・待機中コマンド数・稼働時間を取得 |
-| `GET` | `/health` | サーバーのヘルスチェック |
+| `POST` | `/command` | 単一コマンドを実行（v1 完全互換。`sessionId` 指定可） |
+| `POST` | `/api/v2/batch` | 複数ステップのバッチ実行 (`steps`, `stopOnError`, `sessionId`) |
+| `GET` | `/api/v2/sessions` | 接続中の拡張機能セッション一覧 |
+| `GET` | `/api/v2/traces` | コマンド実行トレース履歴 (`?limit=50`) |
+| `GET` | `/api/v2/workflows` | 保存済みワークフロー一覧 |
+| `POST` | `/api/v2/workflows` | ワークフローの作成・更新 |
+| `DELETE` | `/api/v2/workflows/:id` | ワークフローの削除 |
+| `POST` | `/api/v2/workflows/:id/run` | 保存済みワークフローの実行 |
+| `GET` | `/api/v2/events` | リアルタイム SSE イベントストリーム (`snapshot`, `trace`, `session`, `command`) |
+| `GET` | `/status` | サーバー・拡張機能の接続状態 |
+| `GET` | `/health` | ヘルスチェック |
+| `GET` | `/ui` | Web Control Center |
+| `GET` | `/docs` / `/openapi.json` | OpenAPI 仕様書・ドキュメント UI |
 
-## 📖 コマンドリファレンス
+```bash
+# v1 互換の単一コマンド
+curl -X POST http://127.0.0.1:8766/command \
+  -H "Content-Type: application/json" \
+  -d '{"action":"navigate","params":{"url":"https://example.com"}}'
 
-### ナビゲーション
-
-| コマンド | 説明 | パラメータ |
-|:---|:---|:---|
-| `navigate` | URLに移動 | `url` (必須), `tabId` (任意) |
-| `new_tab` | 新しいタブを開く | `url` (任意) |
-| `close_tab` | タブを閉じる | `tabId` (任意, デフォルト: グループ内タブ) |
-| `switch_tab` | タブを切り替え | `tabId` (必須) |
-| `go_back` | 戻る | `tabId` (任意) |
-| `go_forward` | 進む | `tabId` (任意) |
-| `reload` | リロード | `tabId` (任意) |
-| `get_url` | 現在のURLを取得 | `tabId` (任意) |
-| `get_tabs` | タブ一覧を取得 | — |
-
-### DOM操作
-
-| コマンド | 説明 | パラメータ |
-|:---|:---|:---|
-| `click` | 要素をクリック | `selector` (必須, CSSセレクタ), `allFrames` (任意) |
-| `click_at` | 座標を指定してクリック | `x` (必須), `y` (必須), `allFrames` (任意) |
-| `type` | テキスト入力 | `selector` (必須), `text` (必須), `clear` (任意, デフォルト: `true`), `allFrames` (任意) |
-| `hover` | 要素にホバー | `selector` (必須), `allFrames` (任意) |
-| `select` | ドロップダウン選択 | `selector` (必須), `value` (必須) |
-| `scroll` | スクロール | `direction` + `amount`、または `x` + `y`、または `selector` |
-
-### コンテンツ取得
-
-| コマンド | 説明 | パラメータ |
-|:---|:---|:---|
-| `get_content` | HTMLを取得 | `selector` (任意), `allFrames` (任意) |
-| `get_text` | テキストを取得 | `selector` (任意), `allFrames` (任意) |
-| `get_elements` | 要素情報を取得 | `selector` (必須), `limit` (任意, デフォルト: `20`), `allFrames` (任意) |
-| `screenshot` | スクリーンショット | `format` (任意: `png`/`jpeg`), `quality` (任意) |
-
-### iframe操作
-
-| コマンド | 説明 | パラメータ |
-|:---|:---|:---|
-| `iframe_click` | iframe内の要素をクリック | `selector` (必須), `frameUrl` (任意: 対象フレームURLの部分一致) |
-| `iframe_click_at` | iframe内の座標をクリック | `x` (必須), `y` (必須), `frameUrl` (任意) |
-| `iframe_get_elements` | iframe内の要素情報を取得 | `selector` (必須), `limit` (任意, デフォルト: `30`), `frameUrl` (任意) |
-| `iframe_get_text` | iframe内のテキストを取得 | `selector` (任意), `frameUrl` (任意) |
-
-### その他
-
-| コマンド | 説明 | パラメータ |
-|:---|:---|:---|
-| `evaluate` | JavaScript実行 | `code` (必須) |
-| `wait_for` | 要素の出現を待機 | `selector` (必須), `timeout` (任意, デフォルト: `10000`ms) |
-
-### レスポンス例
-
-```json
-// 成功
-{
-  "success": true,
-  "id": "550e8400-e29b-41d4-a716-446655440000",
-  "result": { "id": "550e8400-e29b-41d4-a716-446655440000", "success": true, "tabId": 42, "url": "https://example.com" }
-}
-
-// 失敗
-{
-  "error": "Chrome extension is not connected"
-}
+# v2 バッチ実行
+curl -X POST http://127.0.0.1:8766/api/v2/batch \
+  -H "Content-Type: application/json" \
+  -d '{"steps":[{"action":"navigate","params":{"url":"https://example.com"}},{"action":"snapshot","params":{"markOverlay":true}}]}'
 ```
 
-## ⚙️ 設定
+---
 
-### サーバーURL変更
+## 🎬 Chrome Side Panel & Action Recorder
 
-拡張機能のポップアップでサーバーURLを変更できます（デフォルト: `ws://localhost:8767`）。
+Chrome ツールバーの拡張機能アイコンのコンテキストメニューまたはポップアップの **「Side Panel」** から **Antigravity Studio** を開けます。
 
-### ポート・ホスト変更
+1. **Live Feed タブ**:
+   - `Run AI Snapshot (Overlay)` / `Clear Marks` のワンクリック実行
+   - バックグラウンドで実行された全コマンドの成功/失敗・所要時間をリアルタイム表示
+2. **Action Recorder タブ**:
+   - **Record** を押して Chrome 上でクリック・入力・遷移・選択を行うとステップを自動記録
+   - 記録した操作を **Batch JSON** / **`agb` CLI スクリプト** / **TypeScript SDK コード** として即座にコピー可能
+3. **Quick Runner タブ**:
+   - `navigate` / `snapshot` / `evaluate` をブラウザ横から即テスト実行
 
-環境変数で設定を変更できます（デフォルトは `127.0.0.1` のみでリッスンします）：
+> 操作対象タブは自動的に「🤖 Antigravity」タブグループで整理されます。
+
+---
+
+## 📖 全コマンドリファレンス (全32アクション)
+
+### ナビゲーション & タブ管理
+
+| コマンド | 説明 | 主なパラメータ |
+|:---|:---|:---|
+| `navigate` | URL へ移動 | `url` (必須), `tabId` |
+| `new_tab` | 新しいタブを開く | `url` |
+| `close_tab` | タブを閉じる | `tabId` |
+| `switch_tab` | タブを切り替え | `tabId` (必須) |
+| `go_back` | 履歴を戻る | `tabId` |
+| `go_forward` | 履歴を進む | `tabId` |
+| `reload` | ページをリロード | `tabId` |
+| `get_url` | 現在の URL を取得 | `tabId` |
+| `get_tabs` | タブ一覧とグループ状態を取得 | — |
+
+### AI Snapshot & 視覚マーカー (v2)
+
+| コマンド | 説明 | 主なパラメータ |
+|:---|:---|:---|
+| `snapshot` | `@eN` 参照付き DOM スナップショット取得 | `interactiveOnly` (既定 `true`), `markOverlay`, `maxElements`, `tabId` |
+| `clear_marks` | ページ上の `@eN` オーバーレイバッジを削除 | `tabId` |
+
+### DOM 操作 & 高度な CDP 操作
+
+| コマンド | 説明 | 主なパラメータ |
+|:---|:---|:---|
+| `click` | 要素をクリック | `selector` または `ref` (`@e1`), `engine` (`auto`/`scripting`/`cdp`), `allFrames`, `tabId` |
+| `click_at` | 座標を指定してクリック | `x` (必須), `y` (必須), `allFrames`, `tabId` |
+| `type` | テキスト入力 | `selector` または `ref`, `text` (必須), `clear`, `engine`, `allFrames`, `tabId` |
+| `hover` | 要素にホバー | `selector` または `ref`, `engine`, `allFrames`, `tabId` |
+| `select` | ドロップダウン選択 | `selector` または `ref`, `value` (必須), `engine`, `tabId` |
+| `scroll` | スクロール | `direction` + `amount` / `x` + `y` / `selector` / `ref`, `engine`, `allFrames`, `tabId` |
+| `press_key` | **v2** 信頼済みキーボード入力 (CDP) | `key` (必須), `modifiers` (`Alt`/`Control`/`Meta`/`Shift`), `selector`/`ref`, `text`, `tabId` |
+| `drag_and_drop` | **v2** ドラッグ＆ドロップ (CDP) | `sourceSelector`/`sourceRef`/`sourceX,Y` & `targetSelector`/`targetRef`/`targetX,Y`, `tabId` |
+| `upload_file` | **v2** ファイル入力へファイル設定 (CDP) | `selector` または `ref`, `files` (パス配列, 必須), `tabId` |
+
+### コンテンツ・ログ・スクリーンショット
+
+| コマンド | 説明 | 主なパラメータ |
+|:---|:---|:---|
+| `get_content` | HTML を取得 | `selector`, `allFrames`, `tabId` |
+| `get_text` | テキストを取得 | `selector`, `allFrames`, `tabId` |
+| `get_elements` | 要素情報を取得 | `selector` (必須), `limit`, `allFrames`, `tabId` |
+| `screenshot` | スクリーンショット取得（**v2** フルページ・要素クロップ・SoM対応） | `format` (`png`/`jpeg`), `quality`, `fullPage`, `selector`/`ref`, `markOverlay`, `tabId` |
+| `get_console_logs` | **v2** コンソールログ取得 (CDP) | `level` (`all`/`error`/`warn`/`info`/`log`), `limit`, `clear`, `tabId` |
+| `get_network_logs` | **v2** ネットワーク通信ログ取得 (CDP) | `urlPattern`, `errorsOnly`, `limit`, `clear`, `tabId` |
+
+### iframe 操作 & スクリプト・待機
+
+| コマンド | 説明 | 主なパラメータ |
+|:---|:---|:---|
+| `iframe_click` | iframe 内の要素をクリック | `selector` (必須), `frameUrl`, `tabId` |
+| `iframe_click_at` | iframe 内の座標をクリック | `x` (必須), `y` (必須), `frameUrl`, `tabId` |
+| `iframe_get_elements` | iframe 内の要素情報を取得 | `selector` (必須), `limit`, `frameUrl`, `tabId` |
+| `iframe_get_text` | iframe 内のテキストを取得 | `selector`, `frameUrl`, `tabId` |
+| `evaluate` | JavaScript を実行 | `code` (必須), `tabId` |
+| `wait_for` | 要素の出現を待機 | `selector` (必須), `timeout` (既定 `10000`ms), `tabId` |
+
+---
+
+## ⚙️ 環境変数・セキュリティ設定
+
+ブリッジサーバーは以下の環境変数で挙動とセキュリティポリシーを制御できます：
 
 | 環境変数 | デフォルト値 | 説明 |
 |:---|:---|:---|
 | `HOST` | `127.0.0.1` | バインドするホストアドレス |
-| `WS_PORT` | `8767` | WebSocketポート (Chrome拡張用) |
-| `HTTP_PORT` | `8766` | HTTP APIポート (Antigravity用) |
+| `HTTP_PORT` | `8766` | HTTP API / Web UI ポート |
+| `WS_PORT` | `8767` | WebSocket ポート (Chrome 拡張用) |
 | `COMMAND_TIMEOUT_MS` | `30000` | コマンドのタイムアウト (ms) |
+| `AGB_AUTH_TOKEN` | 未設定 | 設定すると `/command`・`/status`・`/api/v2/*` に `Authorization: Bearer <token>` が必須になります |
+| `AGB_WS_REQUIRE_TOKEN` | `false` | `true` の場合、WebSocket 接続時にも `?token=` または `Authorization` でトークン検証を実施 |
+| `AGB_ALLOWED_DOMAINS` | 未設定 | カンマ区切りの許可ドメイン（例: `example.com,*.internal.local`）。設定時は一致ドメインのみ遷移許可 |
+| `AGB_BLOCKED_DOMAINS` | 未設定 | カンマ区切りの拒否ドメイン（許可リストより優先してブロック） |
+| `AGB_ALLOW_FILE_URLS` | `false` | `true` の場合のみ `file://` URL への遷移を許可 |
+| `AGB_RATE_LIMIT_PER_MIN` | `600` | IP あたり 1 分間の HTTP API リクエスト上限 |
+| `AGB_WORKFLOWS_FILE` | 未設定 | 保存済みワークフローの JSON 永続化ファイルパス（未設定時はインメモリ） |
 
 ```bash
-WS_PORT=9767 HTTP_PORT=9766 node bridge-server.js
+AGB_AUTH_TOKEN="my-secret" \
+AGB_ALLOWED_DOMAINS="example.com,*.github.com" \
+AGB_RATE_LIMIT_PER_MIN=300 \
+pnpm start
 ```
 
-## 📁 構成
+---
 
-```text
-antigravity-chrome-bridge/
-├── extension/           # Chrome拡張機能 (Manifest V3)
-│   ├── manifest.json    # MV3マニフェスト
-│   ├── background.js    # Service Worker
-│   ├── popup.html       # ポップアップUI
-│   ├── popup.js         # ポップアップロジック
-│   ├── popup.css        # ポップアップスタイル
-│   └── icons/           # アイコン
-├── server/              # ブリッジサーバー (Node.js)
-│   ├── package.json     # 依存パッケージ
-│   ├── bridge-server.js # メインサーバー
-│   └── start.bat        # Windows用起動スクリプト
-├── LICENSE              # MITライセンス
-└── README.md
+## 🧪 開発・テストコマンド
+
+```bash
+# 全ワークスペースのビルド
+pnpm build
+
+# リンター・フォーマットチェック (Biome)
+pnpm lint
+pnpm lint:fix
+
+# TypeScript 型チェック
+pnpm typecheck
+
+# 全ユニットテスト + フルスタック E2E テストの実行
+pnpm test
+
+# Chrome 拡張機能の ZIP パッケージング (release/ に出力)
+pnpm package:extension
 ```
+
+---
 
 ## ⚠️ 注意事項
 
-- Chrome 116以降が必要です（WebSocket keepalive対応）
-- `chrome://` や拡張機能ページなど、Chromeの内部ページでは操作できません
-- スクリーンショットは表示中のタブのみ撮影可能です
-- ブリッジサーバーはデフォルトでローカル（`127.0.0.1`）のみで動作します
-- ドパガキ駆動開発のため動かなくても知りません
+- Chrome 116 以降が必要です（Manifest V3 Service Worker WebSocket keepalive 対応）
+- `chrome://` や Chrome ウェブストア等の内部ページでは拡張機能による操作が制限されます
+- スクリーンショットの `chrome.tabs.captureVisibleTab` は表示中タブを対象とします（`fullPage: true` は CDP 経由で全体撮影）
+- ドパガキ駆動開発の精神を継承しつつ、型安全性とテストだけはガチガチに固めています
 
 ## 📄 ライセンス
 
