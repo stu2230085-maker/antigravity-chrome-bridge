@@ -236,7 +236,7 @@ importers:
         version: 4.13.22
       ws:
         specifier: ^8.18.2
-        version: 8.23.0
+        version: 8.23.1
     devDependencies:
       '@types/node':
         specifier: ^22.15.17
@@ -288,7 +288,7 @@ importers:
         version: 3.2.7(@types/node@22.20.7)(tsx@4.23.15)
       ws:
         specifier: ^8.18.2
-        version: 8.23.0
+        version: 8.23.1
 
   packages/cli:
     dependencies:
@@ -313,7 +313,7 @@ importers:
         version: 3.2.7(@types/node@22.20.7)(tsx@4.23.15)
       ws:
         specifier: ^8.18.2
-        version: 8.23.0
+        version: 8.23.1
 
   packages/mcp:
     dependencies:
@@ -344,7 +344,7 @@ importers:
         version: 3.2.7(@types/node@22.20.7)(tsx@4.23.15)
       ws:
         specifier: ^8.18.2
-        version: 8.23.0
+        version: 8.23.1
 
   packages/protocol:
     dependencies:
@@ -376,7 +376,7 @@ importers:
         version: 3.2.7(@types/node@22.20.7)(tsx@4.23.15)
       ws:
         specifier: ^8.18.2
-        version: 8.23.0
+        version: 8.23.1
 
 packages:
 
@@ -1562,8 +1562,8 @@ packages:
   wrappy@1.0.2:
     resolution: {integrity: sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==}
 
-  ws@8.23.0:
-    resolution: {integrity: sha512-wCkmX8QMOrKjgO8HW2WyDbTSGeqkocxgDzS9iR79rEAexty6/2qzilx3Ag8Tqf9ykop3irLKle0MtVn5qjVnoQ==}
+  ws@8.23.1:
+    resolution: {integrity: sha512-1rzWDSN0NOi3tpwgHsQExjWRoKUGtjCkJ2gZRaaRtzhYLboMytOI9pj9PU7yCgY37auqdd4OyLofZDbkeuZmPA==}
     engines: {node: '>=10.0.0'}
     peerDependencies:
       bufferutil: ^4.0.1
@@ -2617,7 +2617,7 @@ snapshots:
 
   wrappy@1.0.2: {}
 
-  ws@8.23.0: {}
+  ws@8.23.1: {}
 
   zod-to-json-schema@3.25.2(zod@3.25.76):
     dependencies:
