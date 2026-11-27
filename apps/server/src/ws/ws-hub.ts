@@ -1,12 +1,13 @@
 import { HelloMessageSchema } from '@antigravity-bridge/protocol';
 import type { WebSocket, WebSocketServer } from 'ws';
 import type { Logger } from '../logger.js';
-import { tokensMatch } from '../middleware/security.js';
+import { isAllowedOrigin, tokensMatch } from '../middleware/security.js';
 import type { SessionManager } from '../services/session-manager.js';
 
 export interface WsHubAuthOptions {
   authToken?: string;
   wsRequireToken?: boolean;
+  allowedOrigins?: string[];
 }
 
 export function attachWsHub(
@@ -20,6 +21,14 @@ export function attachWsHub(
 
   wss.on('connection', (ws: WebSocket, req) => {
     const clientIp = req.socket.remoteAddress;
+    const origin = req.headers.origin;
+    if (origin !== undefined && !isAllowedOrigin(origin, authOptions.allowedOrigins)) {
+      logger.warn(
+        `Rejected WebSocket connection from ${clientIp ?? 'unknown'}: forbidden origin "${origin}"`,
+      );
+      ws.close(4003, 'Forbidden origin');
+      return;
+    }
     let queryToken: string | undefined;
     try {
       const reqUrl = new URL(req.url || '/', 'http://localhost');

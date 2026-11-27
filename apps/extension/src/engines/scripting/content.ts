@@ -1,5 +1,6 @@
 import { resolveTab } from '../../background/tab-group.js';
 import { cdpScreenshot } from '../cdp/actions.js';
+import { sendCdpCommand } from '../cdp/debugger-manager.js';
 import { resolveSelector } from '../snapshot/index.js';
 import type { CommandResult } from './types.js';
 
@@ -169,16 +170,42 @@ export async function cmdEvaluate(params: Record<string, unknown>): Promise<Comm
   const code = typeof params.code === 'string' ? params.code : undefined;
   if (!code) return { success: false, error: 'Missing parameter: code' };
 
+  if (typeof chrome === 'undefined' || !chrome.debugger?.sendCommand) {
+    return { success: false, error: 'CDP debugger API is required for evaluate in MV3' };
+  }
+
   const tab = await resolveTab(params);
   if (tab.id === undefined) return { success: false, error: 'Resolved tab has no ID' };
 
-  const fn = new Function(`return (async () => { ${code} })()`) as () => unknown;
-  const results = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
-    func: fn,
+  interface CdpEvaluateResponse {
+    result?: {
+      type?: string;
+      value?: unknown;
+      description?: string;
+    };
+    exceptionDetails?: {
+      text?: string;
+      exception?: {
+        description?: string;
+      };
+    };
+  }
+
+  const evalRes = await sendCdpCommand<CdpEvaluateResponse>(tab.id, 'Runtime.evaluate', {
+    expression: `(async () => { ${code} })()`,
+    awaitPromise: true,
+    returnByValue: true,
   });
 
-  return { success: true, result: results[0]?.result };
+  if (evalRes?.exceptionDetails) {
+    const error =
+      evalRes.exceptionDetails.exception?.description ||
+      evalRes.exceptionDetails.text ||
+      'Evaluation failed';
+    return { success: false, error };
+  }
+
+  return { success: true, result: evalRes?.result?.value };
 }
 
 export async function cmdWaitFor(params: Record<string, unknown>): Promise<CommandResult> {

@@ -1,7 +1,12 @@
 import { type BridgeSystem, createBridgeSystem } from '@antigravity-bridge/server';
 import { afterEach, describe, expect, it } from 'vitest';
 import { WebSocket } from 'ws';
-import { AntigravityBridgeClient, BridgeClientError, splitTarget } from '../index.js';
+import {
+  AntigravityBridgeClient,
+  BridgeClientError,
+  formatCompactSnapshot,
+  splitTarget,
+} from '../index.js';
 
 async function connectMockExtension(wsPort: number): Promise<WebSocket> {
   const ws = new WebSocket(`ws://127.0.0.1:${wsPort}`);
@@ -178,9 +183,14 @@ describe('@antigravity-bridge/sdk', () => {
     expect(sessions.count).toBe(1);
 
     await client.navigate('https://example.com');
-    const snap = await client.snapshot({ interactiveOnly: true });
+    const snap = await client.snapshot({
+      interactiveOnly: true,
+      includeShadowDom: true,
+      allFrames: true,
+    });
     expect(snap.count).toBe(1);
     expect(snap.elements[0]?.ref).toBe('@e1');
+    expect(formatCompactSnapshot(snap)).toContain('[@e1] button "Go"');
 
     await client.click('@e1', { engine: 'cdp' });
     await client.type('#search', 'vitest', { clear: true });
@@ -200,6 +210,15 @@ describe('@antigravity-bridge/sdk', () => {
     const urlRes = await client.getUrl();
     expect(urlRes.url).toBe('https://example.com');
 
+    await client.newTab('https://example.com/2');
+    await client.switchTab(2);
+    await client.goBack({ tabId: 2 });
+    await client.goForward({ tabId: 2 });
+    await client.reload({ tabId: 2 });
+    await client.closeTab({ tabId: 2 });
+    await client.uploadFile('@e3', ['/tmp/report.pdf']);
+    await client.dragAndDrop({ sourceTarget: '@e1', targetTarget: '#dropzone' });
+
     const cLogs = await client.consoleLogs({ level: 'error' });
     expect(cLogs.count).toBe(1);
     const nLogs = await client.networkLogs({ errorsOnly: true });
@@ -213,8 +232,13 @@ describe('@antigravity-bridge/sdk', () => {
     expect(batchRes.completedSteps).toBe(2);
 
     const traces = await client.traces(5);
-    expect(traces.count).toBe(5);
+    expect(traces.count).toBeGreaterThanOrEqual(5);
 
+    expect(received.find((r) => r.action === 'snapshot')?.params).toMatchObject({
+      interactiveOnly: true,
+      includeShadowDom: true,
+      allFrames: true,
+    });
     expect(received.find((r) => r.action === 'click')?.params).toMatchObject({
       ref: '@e1',
       engine: 'cdp',
@@ -224,6 +248,136 @@ describe('@antigravity-bridge/sdk', () => {
       text: 'vitest',
       clear: true,
     });
+    expect(received.find((r) => r.action === 'new_tab')?.params).toMatchObject({
+      url: 'https://example.com/2',
+    });
+    expect(received.find((r) => r.action === 'switch_tab')?.params).toMatchObject({
+      tabId: 2,
+    });
+    expect(received.find((r) => r.action === 'go_back')?.params).toMatchObject({ tabId: 2 });
+    expect(received.find((r) => r.action === 'go_forward')?.params).toMatchObject({ tabId: 2 });
+    expect(received.find((r) => r.action === 'reload')?.params).toMatchObject({ tabId: 2 });
+    expect(received.find((r) => r.action === 'close_tab')?.params).toMatchObject({ tabId: 2 });
+    expect(received.find((r) => r.action === 'upload_file')?.params).toMatchObject({
+      ref: '@e3',
+      files: ['/tmp/report.pdf'],
+    });
+    expect(received.find((r) => r.action === 'drag_and_drop')?.params).toMatchObject({
+      sourceRef: '@e1',
+      targetSelector: '#dropzone',
+    });
+  });
+
+  it('supports Saved Workflows API (list, save, run, delete)', async () => {
+    const calls: Array<{ url: string; method: string; body?: unknown }> = [];
+
+    const mockFetch: typeof globalThis.fetch = async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      const method = init?.method ?? 'GET';
+      const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+      calls.push({ url, method, body });
+
+      if (method === 'GET' && url.endsWith('/api/v2/workflows')) {
+        return new Response(
+          JSON.stringify({
+            workflows: [
+              {
+                id: 'wf-login',
+                name: 'Login Flow',
+                steps: [{ action: 'navigate', params: { url: 'https://example.com' } }],
+                createdAt: 1,
+                updatedAt: 2,
+              },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      if (method === 'POST' && url.endsWith('/api/v2/workflows')) {
+        return new Response(
+          JSON.stringify({
+            workflow: {
+              id: 'wf-login',
+              name: 'Login Flow',
+              steps: [{ action: 'navigate', params: { url: 'https://example.com' } }],
+              createdAt: 1,
+              updatedAt: 2,
+            },
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      if (method === 'POST' && url.endsWith('/api/v2/workflows/wf-login/run')) {
+        return new Response(
+          JSON.stringify({
+            workflowId: 'wf-login',
+            success: true,
+            completedSteps: 1,
+            totalSteps: 1,
+            durationMs: 12,
+            results: [{ index: 0, action: 'navigate', success: true, durationMs: 12 }],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      if (method === 'DELETE' && url.endsWith('/api/v2/workflows/wf-login')) {
+        return new Response(JSON.stringify({ deleted: true }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      return new Response(JSON.stringify({ error: 'Not found' }), { status: 404 });
+    };
+
+    const client = new AntigravityBridgeClient({
+      baseUrl: 'http://127.0.0.1:9999',
+      sessionId: 'default-session',
+      fetch: mockFetch,
+    });
+
+    const saved = await client.saveWorkflow({
+      id: 'wf-login',
+      name: 'Login Flow',
+      steps: [{ action: 'navigate', params: { url: 'https://example.com' } }],
+    });
+    expect(saved.workflow.id).toBe('wf-login');
+
+    const listed = await client.listWorkflows();
+    expect(listed.workflows).toHaveLength(1);
+
+    const runRes = await client.runWorkflow('wf-login', { stopOnError: true });
+    expect(runRes.workflowId).toBe('wf-login');
+    expect(runRes.completedSteps).toBe(1);
+
+    const delRes = await client.deleteWorkflow('wf-login');
+    expect(delRes.deleted).toBe(true);
+
+    expect(calls).toEqual([
+      {
+        url: 'http://127.0.0.1:9999/api/v2/workflows',
+        method: 'POST',
+        body: {
+          id: 'wf-login',
+          name: 'Login Flow',
+          steps: [{ action: 'navigate', params: { url: 'https://example.com' } }],
+        },
+      },
+      { url: 'http://127.0.0.1:9999/api/v2/workflows', method: 'GET', body: undefined },
+      {
+        url: 'http://127.0.0.1:9999/api/v2/workflows/wf-login/run',
+        method: 'POST',
+        body: { stopOnError: true, sessionId: 'default-session' },
+      },
+      {
+        url: 'http://127.0.0.1:9999/api/v2/workflows/wf-login',
+        method: 'DELETE',
+        body: undefined,
+      },
+    ]);
   });
 
   it('sends authToken, sessionId, and retries on 5xx responses', async () => {

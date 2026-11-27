@@ -50,7 +50,6 @@ export function createBridgeSystem(partialConfig: Partial<ServerConfig> = {}): B
   );
 
   let httpServer: NodeHttpServer | undefined;
-  const wss = new WebSocketServer({ noServer: true });
   let boundWss: WebSocketServer | undefined;
 
   const start = async (): Promise<{ httpPort: number; wsPort: number }> => {
@@ -77,6 +76,7 @@ export function createBridgeSystem(partialConfig: Partial<ServerConfig> = {}): B
     attachWsHub(boundWss, sessionManager, logger, {
       authToken: config.authToken,
       wsRequireToken: config.wsRequireToken,
+      allowedOrigins: config.allowedOrigins,
     });
     system.wss = boundWss;
 
@@ -128,10 +128,6 @@ export function createBridgeSystem(partialConfig: Partial<ServerConfig> = {}): B
       boundWss = undefined;
     }
 
-    await new Promise<void>((resolve) => {
-      wss.close(() => resolve());
-    });
-
     if (httpServer) {
       if (
         'closeAllConnections' in httpServer &&
@@ -151,7 +147,7 @@ export function createBridgeSystem(partialConfig: Partial<ServerConfig> = {}): B
   const system: BridgeSystem = {
     app,
     httpServer: undefined as unknown as NodeHttpServer,
-    wss,
+    wss: undefined as unknown as WebSocketServer,
     sessionManager,
     traceStore,
     workflowStore,

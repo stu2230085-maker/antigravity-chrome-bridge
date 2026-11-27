@@ -243,3 +243,47 @@ export const NetworkLogEntrySchema = z.object({
 });
 
 export type NetworkLogEntry = z.infer<typeof NetworkLogEntrySchema>;
+
+/**
+ * Formats a DOM snapshot into a compact, token-efficient Accessibility-Tree style text block
+ * suitable for LLM context windows and MCP tool outputs.
+ */
+export function formatCompactSnapshot(input: {
+  url?: string;
+  title?: string;
+  elements: SnapshotElement[];
+}): string {
+  const lines: string[] = [];
+  if (input.title || input.url) {
+    const header = [input.title, input.url ? `(${input.url})` : ''].filter(Boolean).join(' ');
+    lines.push(`Page: ${header}`);
+  }
+  lines.push(`Interactive Elements (${input.elements.length}):`);
+
+  for (const el of input.elements) {
+    const displayLabel = (el.label || el.text || '').replace(/\s+/g, ' ').trim();
+    const parts = [`[${el.ref}]`, el.role];
+    if (displayLabel) {
+      parts.push(`"${displayLabel.slice(0, 80)}"`);
+    }
+    if (el.value !== undefined && el.value.length > 0) {
+      parts.push(`value="${el.value.slice(0, 60)}"`);
+    }
+    if (el.placeholder && el.placeholder !== displayLabel) {
+      parts.push(`placeholder="${el.placeholder.slice(0, 40)}"`);
+    }
+    if (el.href) {
+      parts.push(`href="${el.href.slice(0, 80)}"`);
+    }
+    if (el.checked !== undefined) {
+      parts.push(`checked=${el.checked}`);
+    }
+    if (el.disabled) {
+      parts.push('disabled');
+    }
+    parts.push(`@(${el.rect.x},${el.rect.y} ${el.rect.width}x${el.rect.height})`);
+    lines.push(`  ${parts.join(' ')}`);
+  }
+
+  return lines.join('\n');
+}

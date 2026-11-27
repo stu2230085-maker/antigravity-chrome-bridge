@@ -325,4 +325,70 @@ describe('@antigravity-bridge/server integration', () => {
     const personalJson = (await personalRes.json()) as { result: { from: string } };
     expect(personalJson.result.from).toBe('personal');
   });
+
+  it('rejects unknown actions and invalid command parameters at HTTP boundary with 400', async () => {
+    const system = createBridgeSystem({
+      host: '127.0.0.1',
+      httpPort: 0,
+      wsPort: 0,
+      quiet: true,
+    });
+    systems.push(system);
+    const { httpPort } = await system.start();
+
+    // Unknown action returns 400 immediately even without a connected session
+    const unknownRes = await fetch(`http://127.0.0.1:${httpPort}/command`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'nonexistent_action', params: {} }),
+    });
+    expect(unknownRes.status).toBe(400);
+    const unknownBody = (await unknownRes.json()) as { error: string };
+    expect(unknownBody.error).toContain('Unknown command action');
+
+    // Invalid params (click requires selector or ref) returns 400 immediately
+    const badClickRes = await fetch(`http://127.0.0.1:${httpPort}/command`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'click', params: {} }),
+    });
+    expect(badClickRes.status).toBe(400);
+    const badClickBody = (await badClickRes.json()) as { error: string };
+    expect(badClickBody.error).toContain('Invalid parameters for "click"');
+
+    // Batch with invalid step returns 400 with stepIndex and action
+    const badBatchRes = await fetch(`http://127.0.0.1:${httpPort}/api/v2/batch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        steps: [{ action: 'get_url' }, { action: 'click', params: {} }],
+      }),
+    });
+    expect(badBatchRes.status).toBe(400);
+    const badBatchBody = (await badBatchRes.json()) as {
+      error: string;
+      stepIndex: number;
+      action: string;
+    };
+    expect(badBatchBody.stepIndex).toBe(1);
+    expect(badBatchBody.action).toBe('click');
+
+    // Workflow with invalid step returns 400 with stepIndex and action
+    const badWfRes = await fetch(`http://127.0.0.1:${httpPort}/api/v2/workflows`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: 'Broken Flow',
+        steps: [{ action: 'unknown_step' }],
+      }),
+    });
+    expect(badWfRes.status).toBe(400);
+    const badWfBody = (await badWfRes.json()) as {
+      error: string;
+      stepIndex: number;
+      action: string;
+    };
+    expect(badWfBody.stepIndex).toBe(0);
+    expect(badWfBody.action).toBe('unknown_step');
+  });
 });

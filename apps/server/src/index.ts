@@ -6,6 +6,8 @@ import { createBridgeSystem } from './server.js';
 
 export { loadConfig, type ServerConfig } from './config.js';
 export {
+  createCsrfAndOriginMiddleware,
+  isAllowedOrigin,
   type PolicyCheckResult,
   type SecurityConfig,
   validateCommandPolicy,

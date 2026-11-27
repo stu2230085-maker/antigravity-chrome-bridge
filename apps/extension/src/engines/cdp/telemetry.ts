@@ -207,6 +207,7 @@ export async function cmdGetConsoleLogs(params: Record<string, unknown>): Promis
   if (tab.id === undefined) return { success: false, error: 'Resolved tab has no ID' };
 
   await debuggerManager.ensureAttached(tab.id);
+  debuggerManager.pinTelemetry(tab.id);
 
   const level = typeof params.level === 'string' ? params.level : 'all';
   const limit =
@@ -238,6 +239,7 @@ export async function cmdGetNetworkLogs(params: Record<string, unknown>): Promis
   if (tab.id === undefined) return { success: false, error: 'Resolved tab has no ID' };
 
   await debuggerManager.ensureAttached(tab.id);
+  debuggerManager.pinTelemetry(tab.id);
 
   const urlPattern = typeof params.urlPattern === 'string' ? params.urlPattern : undefined;
   const errorsOnly = Boolean(params.errorsOnly);

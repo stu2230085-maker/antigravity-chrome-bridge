@@ -1,17 +1,27 @@
 name: CI
 
+permissions:
+  contents: read
+
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
 on:
   push:
     branches:
       - master
       - main
-      - "feat/**"
   pull_request:
 
 jobs:
   ci:
-    name: Build, Lint, Typecheck & Test
+    name: Build, Lint, Typecheck & Test (Node ${{ matrix.node-version }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node-version: [20, 22]
 
     steps:
       - name: Checkout repository
@@ -20,10 +30,10 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
-          node-version: 22
+          node-version: ${{ matrix.node-version }}
           cache: pnpm
 
       - name: Install dependencies
@@ -42,11 +52,13 @@ jobs:
         run: pnpm test
 
       - name: Package Chrome extension
-        run: pnpm package:extension
+        if: matrix.node-version == 22
+        run: node scripts/package-extension.mjs
 
       - name: Upload extension ZIP artifact
+        if: matrix.node-version == 22
         uses: actions/upload-artifact@v4
         with:
           name: antigravity-chrome-bridge-extension
-          path: release/antigravity-chrome-bridge-extension-v2.0.0.zip
+          path: release/*.zip
           if-no-files-found: error

@@ -5,11 +5,15 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
+    "@antigravity-bridge/server#build": {
+      "dependsOn": ["^build", "@antigravity-bridge/dashboard#build"],
+      "outputs": ["dist/**"]
+    },
     "typecheck": {
       "dependsOn": ["^build"]
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build", "@antigravity-bridge/dashboard#build"]
     },
     "lint": {
       "dependsOn": ["^build"]

@@ -67,6 +67,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (typeof message.profileName === 'string' && message.profileName.trim()) {
       updates.profileName = message.profileName.trim();
     }
+    if (typeof message.authToken === 'string') {
+      updates.authToken = message.authToken.trim();
+    }
 
     const savePromise =
       Object.keys(updates).length > 0 ? chrome.storage.local.set(updates) : Promise.resolve();
@@ -103,6 +106,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       return true;
     }
     sendResponse({ ok: false });
+    return true;
+  }
+
+  if (message.type === 'update_auth_token') {
+    const authToken = typeof message.authToken === 'string' ? message.authToken.trim() : '';
+    void chrome.storage.local.set({ authToken }).then(() => {
+      sendResponse({ ok: true });
+    });
     return true;
   }
 

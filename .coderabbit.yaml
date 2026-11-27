@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "ja-JP"
+early_access: false
+reviews:
+  profile: "chill"
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+  review_status: true
+  collapse_walkthrough: false
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - "master"
+      - "main"
+  path_instructions:
+    - path: "apps/extension/**"
+      instructions: |
+        Chrome Manifest V3 (MV3) 拡張機能のアーキテクチャ・セキュリティ不変条件を重点的に検証してください：
+        1. MV3 Service Worker CSP 準拠: `eval()`、`new Function()`、`setTimeout("<string>")` 等、`script-src 'self'` に違反する動的コード生成が一切混入していないこと（`evaluate` アクションの任意 JS 実行は CDP `Runtime.evaluate` またはユーザー空間で安全に処理されていること）。
+        2. `chrome.scripting.executeScript` 注入関数の自己完結性: `func` に渡す関数はページコンテキストへ `.toString()` でシリアライズ注入されるため、外部スコープの変数・クロージャ・モジュール `import` を一切参照せず、必要な入力はすべて JSON シリアライズ可能な `args` 経由で渡していること。
+        3. CDP (`chrome.debugger`) ライフサイクル管理: アタッチ中の `attachInFlight` 排他制御、タブ閉鎖 (`chrome.tabs.onRemoved`) やユーザー手動解除 (`chrome.debugger.onDetach`) 時の状態クリーンアップ、アイドル時の自動デタッチとコンソール／ネットワークログ監視ピン留め状態の整合性が保たれていること。
+    - path: "apps/server/**"
+      instructions: |
+        ローカル HTTP/SSE + WebSocket ブリッジサーバーのセキュリティ境界を重点的に検証してください：
+        1. Localhost CSRF / Origin 検証: 悪意ある外部 Web ページからの Drive-by Localhost リクエストを防ぐため、HTTP リクエストおよび WebSocket ハンドシェイクの `Origin` ヘッダー（許可されたローカルオリジンまたは `chrome-extension://`）が適切に検証されていること。
+        2. Bearer 認証のタイミング攻撃耐性: `AGB_AUTH_TOKEN` の照合には必ず `node:crypto` の `timingSafeEqual`（`tokensMatch`）を使用し、単純な文字列比較（`===`）を行わないこと。
+        3. URL ドメイン・スキームポリシー: `navigate` / `new_tab` / バッチ / ワークフロー実行において、`chrome:`・`chrome-extension:`・`javascript:`・`data:`・`blob:`・`devtools:` 等の危険スキーム遮断、`AGB_ALLOW_FILE_URLS=false` 時の `file:` 遮断、および `AGB_BLOCKED_DOMAINS` 優先のドメイン検証がバイパスされないこと。
+        4. WebSocket セッション分離: 複数プロファイル接続時に `sessionId` ごとのソケット・保留中コマンド Promise が厳密に分離され、未認証ソケットからのメッセージ拒否や切断時のクリーンアップが確実に行われていること。
+    - path: "packages/protocol/**"
+      instructions: |
+        プロトコル定義とスキーマ互換性を重点的に検証してください：
+        1. v1 ワイヤフォーマット後方互換性: 既存の `POST /command` リクエスト（`{ action, params, sessionId }`）および WebSocket コマンド／レスポンス形式のフィールド互換性を破壊しないこと。
+        2. 厳格な v2 Zod スキーマ: 新規アクション・バッチ・ワークフロー・セッション・トレースのすべてに厳格な Zod スキーマを定義し、TypeScript 型（`z.infer`）とランタイム境界バリデーションが完全に一致していること。
+chat:
+  auto_reply: true

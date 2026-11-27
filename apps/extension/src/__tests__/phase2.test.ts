@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { WsClient } from '../background/ws-client.js';
 import { debuggerManager } from '../engines/cdp/debugger-manager.js';
 import { resetTelemetryForTest } from '../engines/cdp/telemetry.js';
 import { executeCommand } from '../engines/scripting/index.js';
@@ -197,6 +198,69 @@ describe('@antigravity-bridge/extension Phase 2 engines', () => {
     mockChrome.scripting.executeScript.mockResolvedValueOnce([{ result: { removed: true } }]);
     const clearRes = await executeCommand({ action: 'clear_marks', params: {} });
     expect(clearRes).toMatchObject({ success: true, removed: true });
+
+    // allFrames merges frame snapshots up to maxElements and defaults includeShadowDom to true
+    mockChrome.scripting.executeScript.mockResolvedValueOnce([
+      {
+        result: {
+          url: 'https://example.com',
+          title: 'Example',
+          overlayRendered: false,
+          elements: [
+            {
+              ref: '@e1',
+              role: 'button',
+              tagName: 'button',
+              label: 'TopBtn',
+              text: 'TopBtn',
+              visible: true,
+              rect: { x: 0, y: 0, width: 50, height: 20 },
+            },
+          ],
+        },
+      },
+      {
+        result: {
+          url: 'https://frame.example.com',
+          title: 'Frame',
+          overlayRendered: false,
+          elements: [
+            {
+              ref: '@e1',
+              role: 'link',
+              tagName: 'a',
+              label: 'FrameLink1',
+              text: 'FrameLink1',
+              visible: true,
+              rect: { x: 10, y: 10, width: 60, height: 20 },
+            },
+            {
+              ref: '@e2',
+              role: 'link',
+              tagName: 'a',
+              label: 'FrameLink2',
+              text: 'FrameLink2',
+              visible: true,
+              rect: { x: 10, y: 40, width: 60, height: 20 },
+            },
+          ],
+        },
+      },
+    ]);
+    const multiFrameSnap = await executeCommand({
+      action: 'snapshot',
+      params: { allFrames: true, maxElements: 2 },
+    });
+    expect(mockChrome.scripting.executeScript).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        target: { tabId: 101, allFrames: true },
+        args: [true, false, 2, true],
+      }),
+    );
+    expect(multiFrameSnap).toMatchObject({
+      success: true,
+      count: 2,
+    });
   });
 
   it('executes CDP press_key, drag_and_drop, upload_file, and fullPage screenshot', async () => {
@@ -342,5 +406,222 @@ describe('@antigravity-bridge/extension Phase 2 engines', () => {
       requestId: 'req-2',
       status: 500,
     });
+  });
+
+  it('evaluates code via CDP Runtime.evaluate without unsafe-eval and reports exceptions', async () => {
+    mockChrome.debugger.sendCommand.mockImplementation(async (_target: unknown, method: string) => {
+      if (method === 'Runtime.evaluate') {
+        return { result: { type: 'number', value: 42 } };
+      }
+      return {};
+    });
+
+    const okRes = await executeCommand({
+      action: 'evaluate',
+      params: { code: 'return 21 * 2;' },
+    });
+    expect(okRes).toEqual({ success: true, result: 42 });
+    expect(mockChrome.scripting.executeScript).not.toHaveBeenCalled();
+    expect(mockChrome.debugger.sendCommand).toHaveBeenCalledWith(
+      { tabId: 101 },
+      'Runtime.evaluate',
+      {
+        expression: '(async () => { return 21 * 2; })()',
+        awaitPromise: true,
+        returnByValue: true,
+      },
+    );
+
+    mockChrome.debugger.sendCommand.mockImplementation(async (_target: unknown, method: string) => {
+      if (method === 'Runtime.evaluate') {
+        return {
+          exceptionDetails: {
+            text: 'Uncaught',
+            exception: { description: 'ReferenceError: missingVar is not defined' },
+          },
+        };
+      }
+      return {};
+    });
+
+    const errRes = await executeCommand({
+      action: 'evaluate',
+      params: { code: 'return missingVar;' },
+    });
+    expect(errRes).toEqual({
+      success: false,
+      error: 'ReferenceError: missingVar is not defined',
+    });
+  });
+
+  it('falls back from scripting failure to CDP click/type when engine is auto, but not when engine is scripting', async () => {
+    // 1. Auto fallback when scripting click returns found: false
+    mockChrome.scripting.executeScript
+      .mockResolvedValueOnce([{ result: { found: false, error: 'Element not found: #btn' } }])
+      .mockResolvedValueOnce([{ result: { found: true, x: 120, y: 240, tagName: 'BUTTON' } }]);
+
+    const autoClick = await executeCommand({
+      action: 'click',
+      params: { selector: '#btn', engine: 'auto' },
+    });
+    expect(autoClick).toMatchObject({
+      success: true,
+      engine: 'cdp',
+      tabId: 101,
+      x: 120,
+      y: 240,
+    });
+    expect(mockChrome.debugger.sendCommand).toHaveBeenCalledWith(
+      { tabId: 101 },
+      'Input.dispatchMouseEvent',
+      expect.objectContaining({ type: 'mousePressed', x: 120, y: 240 }),
+    );
+
+    // 2. Auto fallback when scripting type throws (default engine = undefined -> auto)
+    mockChrome.scripting.executeScript
+      .mockRejectedValueOnce(new Error('Cannot access contents of page'))
+      .mockResolvedValueOnce([{ result: { found: true } }]);
+
+    const autoType = await executeCommand({
+      action: 'type',
+      params: { selector: '#email', text: 'hello' },
+    });
+    expect(autoType).toMatchObject({
+      success: true,
+      engine: 'cdp',
+      tabId: 101,
+      length: 5,
+    });
+    expect(mockChrome.debugger.sendCommand).toHaveBeenCalledWith(
+      { tabId: 101 },
+      'Input.insertText',
+      { text: 'hello' },
+    );
+
+    // 3. Explicit engine: 'scripting' does NOT fallback to CDP
+    debuggerManager.resetForTest();
+    mockChrome.debugger.attach.mockClear();
+    mockChrome.scripting.executeScript.mockResolvedValueOnce([
+      { result: { found: false, error: 'Element not found: #only-scripting' } },
+    ]);
+
+    const strictScripting = await executeCommand({
+      action: 'click',
+      params: { selector: '#only-scripting', engine: 'scripting' },
+    });
+    expect(strictScripting).toEqual({
+      success: false,
+      error: 'Element not found: #only-scripting',
+    });
+    expect(mockChrome.debugger.attach).not.toHaveBeenCalled();
+  });
+
+  it('auto-detaches idle CDP sessions unless pinned by telemetry commands', async () => {
+    vi.useFakeTimers();
+    try {
+      debuggerManager.setIdleTimeoutMsForTest(500);
+
+      await executeCommand({ action: 'press_key', params: { key: 'Escape' } });
+      expect(debuggerManager.isAttached(101)).toBe(true);
+      expect(mockChrome.debugger.detach).not.toHaveBeenCalled();
+
+      await vi.advanceTimersByTimeAsync(499);
+      expect(debuggerManager.isAttached(101)).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(1);
+      expect(debuggerManager.isAttached(101)).toBe(false);
+      expect(mockChrome.debugger.detach).toHaveBeenCalledWith({ tabId: 101 });
+
+      // Telemetry commands pin the debugger session so console/network events keep streaming
+      mockChrome.debugger.detach.mockClear();
+      await executeCommand({ action: 'get_console_logs', params: {} });
+      await executeCommand({ action: 'press_key', params: { key: 'Tab' } });
+      expect(debuggerManager.isAttached(101)).toBe(true);
+
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(debuggerManager.isAttached(101)).toBe(true);
+      expect(mockChrome.debugger.detach).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('deduplicates concurrent WsClient.connect() calls and includes authToken in hello', async () => {
+    const sentPayloads: string[] = [];
+    const createdSockets: Array<{ onopen: (() => void) | null; close: ReturnType<typeof vi.fn> }> =
+      [];
+
+    class FakeWebSocket {
+      static readonly CONNECTING = 0;
+      static readonly OPEN = 1;
+      static readonly CLOSING = 2;
+      static readonly CLOSED = 3;
+
+      readyState = FakeWebSocket.CONNECTING;
+      onopen: (() => void) | null = null;
+      onmessage: ((ev: MessageEvent<string>) => void) | null = null;
+      onclose: ((ev: CloseEvent) => void) | null = null;
+      onerror: (() => void) | null = null;
+      close = vi.fn(() => {
+        this.readyState = FakeWebSocket.CLOSED;
+      });
+      send = vi.fn((payload: string) => {
+        sentPayloads.push(payload);
+      });
+
+      constructor(_url: string) {
+        createdSockets.push(this);
+      }
+    }
+
+    const originalWs = globalThis.WebSocket;
+    (globalThis as unknown as { WebSocket: typeof FakeWebSocket }).WebSocket = FakeWebSocket;
+
+    const chromeWithStorage = mockChrome as unknown as Record<string, unknown>;
+    chromeWithStorage.storage = {
+      local: {
+        get: vi.fn(async () => {
+          await new Promise((r) => setTimeout(r, 10));
+          return {
+            serverUrl: 'ws://127.0.0.1:8767',
+            profileName: 'work',
+            sessionId: 'ext-session-1',
+            authToken: '  my-secret-token  ',
+          };
+        }),
+        set: vi.fn(async () => undefined),
+      },
+    };
+    chromeWithStorage.runtime = {
+      getManifest: () => ({ version: '2.0.0' }),
+      sendMessage: vi.fn(async () => undefined),
+    };
+
+    try {
+      const client = new WsClient();
+      await Promise.all([client.connect(), client.connect(true)]);
+
+      expect(createdSockets).toHaveLength(1);
+      const sock = createdSockets[0];
+      expect(sock).toBeDefined();
+      if (sock) {
+        (sock as unknown as { readyState: number }).readyState = FakeWebSocket.OPEN;
+        sock.onopen?.();
+      }
+
+      expect(sentPayloads).toHaveLength(1);
+      const hello = JSON.parse(sentPayloads[0] ?? '{}') as Record<string, unknown>;
+      expect(hello).toMatchObject({
+        type: 'hello',
+        sessionId: 'ext-session-1',
+        profile: 'work',
+        version: '2.0.0',
+        token: 'my-secret-token',
+      });
+
+      client.disconnect();
+    } finally {
+      globalThis.WebSocket = originalWs;
+    }
   });
 });

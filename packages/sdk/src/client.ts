@@ -9,9 +9,12 @@ import {
   type ExecutionEngine,
   type KeyModifier,
   type NetworkLogEntry,
+  type SavedWorkflow,
   type SessionSummary,
   type SnapshotElement,
   type TraceEntry,
+  type WorkflowRunRequest,
+  type WorkflowUpsertInput,
 } from '@antigravity-bridge/protocol';
 
 export interface AntigravityBridgeClientOptions {
@@ -152,7 +155,7 @@ export class AntigravityBridgeClient {
 
   private async requestJson<T>(
     path: string,
-    init: { method: 'GET' | 'POST'; body?: unknown } = { method: 'GET' },
+    init: { method: 'GET' | 'POST' | 'DELETE'; body?: unknown } = { method: 'GET' },
   ): Promise<T> {
     let lastError: unknown;
 
@@ -293,6 +296,8 @@ export class AntigravityBridgeClient {
       interactiveOnly?: boolean;
       markOverlay?: boolean;
       maxElements?: number;
+      includeShadowDom?: boolean;
+      allFrames?: boolean;
     } = {},
   ): Promise<SnapshotResult> {
     const { sessionId, ...params } = opts;
@@ -464,5 +469,112 @@ export class AntigravityBridgeClient {
   ): Promise<NetworkLogsResult> {
     const { sessionId, ...params } = opts;
     return this.command<NetworkLogsResult>('get_network_logs', params, { sessionId });
+  }
+
+  newTab(url?: string, opts: { sessionId?: string } = {}): Promise<Record<string, unknown>> {
+    return this.command('new_tab', url !== undefined ? { url } : {}, {
+      sessionId: opts.sessionId,
+    });
+  }
+
+  closeTab(opts: CommandCallOptions = {}): Promise<Record<string, unknown>> {
+    return this.command('close_tab', opts.tabId !== undefined ? { tabId: opts.tabId } : {}, {
+      sessionId: opts.sessionId,
+    });
+  }
+
+  switchTab(tabId: number, opts: { sessionId?: string } = {}): Promise<Record<string, unknown>> {
+    return this.command('switch_tab', { tabId }, { sessionId: opts.sessionId });
+  }
+
+  goBack(opts: CommandCallOptions = {}): Promise<Record<string, unknown>> {
+    return this.command('go_back', opts.tabId !== undefined ? { tabId: opts.tabId } : {}, {
+      sessionId: opts.sessionId,
+    });
+  }
+
+  goForward(opts: CommandCallOptions = {}): Promise<Record<string, unknown>> {
+    return this.command('go_forward', opts.tabId !== undefined ? { tabId: opts.tabId } : {}, {
+      sessionId: opts.sessionId,
+    });
+  }
+
+  reload(opts: CommandCallOptions = {}): Promise<Record<string, unknown>> {
+    return this.command('reload', opts.tabId !== undefined ? { tabId: opts.tabId } : {}, {
+      sessionId: opts.sessionId,
+    });
+  }
+
+  uploadFile(
+    target: string,
+    files: string[],
+    opts: CommandCallOptions = {},
+  ): Promise<Record<string, unknown>> {
+    const { sessionId, ...rest } = opts;
+    return this.command('upload_file', { ...splitTarget(target), files, ...rest }, { sessionId });
+  }
+
+  dragAndDrop(params: {
+    sourceTarget?: string;
+    targetTarget?: string;
+    sourceSelector?: string;
+    sourceRef?: string;
+    targetSelector?: string;
+    targetRef?: string;
+    sourceX?: number;
+    sourceY?: number;
+    targetX?: number;
+    targetY?: number;
+    tabId?: number;
+    sessionId?: string;
+  }): Promise<Record<string, unknown>> {
+    const { sessionId, sourceTarget, targetTarget, ...rest } = params;
+    const resolvedSource = sourceTarget ? splitTarget(sourceTarget) : undefined;
+    const resolvedTarget = targetTarget ? splitTarget(targetTarget) : undefined;
+    return this.command(
+      'drag_and_drop',
+      {
+        ...(resolvedSource?.ref ? { sourceRef: resolvedSource.ref } : {}),
+        ...(resolvedSource?.selector ? { sourceSelector: resolvedSource.selector } : {}),
+        ...(resolvedTarget?.ref ? { targetRef: resolvedTarget.ref } : {}),
+        ...(resolvedTarget?.selector ? { targetSelector: resolvedTarget.selector } : {}),
+        ...rest,
+      },
+      { sessionId },
+    );
+  }
+
+  listWorkflows(): Promise<{ workflows: SavedWorkflow[] }> {
+    return this.requestJson<{ workflows: SavedWorkflow[] }>('/api/v2/workflows');
+  }
+
+  saveWorkflow(input: WorkflowUpsertInput): Promise<{ workflow: SavedWorkflow }> {
+    return this.requestJson<{ workflow: SavedWorkflow }>('/api/v2/workflows', {
+      method: 'POST',
+      body: input,
+    });
+  }
+
+  deleteWorkflow(id: string): Promise<{ deleted: boolean }> {
+    return this.requestJson<{ deleted: boolean }>(`/api/v2/workflows/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  runWorkflow(
+    id: string,
+    opts?: WorkflowRunRequest,
+  ): Promise<{ workflowId: string } & BatchResponse> {
+    const sessionId = opts?.sessionId ?? this.sessionId;
+    return this.requestJson<{ workflowId: string } & BatchResponse>(
+      `/api/v2/workflows/${encodeURIComponent(id)}/run`,
+      {
+        method: 'POST',
+        body: {
+          ...(opts?.stopOnError !== undefined ? { stopOnError: opts.stopOnError } : {}),
+          ...(sessionId !== undefined ? { sessionId } : {}),
+        },
+      },
+    );
   }
 }
