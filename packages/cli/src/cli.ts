@@ -41,6 +41,7 @@ Commands:
   shot [outFile] [--full] [--target]  Capture screenshot (PNG/JPEG data URL or file)
   eval <code>                         Evaluate JavaScript in active tab
   text [selector]                     Get visible text of page or element
+  url                                 Get active tab URL
   tabs                                List browser tabs
   logs [--network] [--errors] [--clear]
                                       Get console or network logs
@@ -335,6 +336,16 @@ export async function runCli(argv: string[], ioOverrides: Partial<CliIo> = {}): 
           emitJson(res);
         } else {
           io.stdout(res.text ?? '');
+        }
+        return 0;
+      }
+
+      case 'url': {
+        const res = await client.getUrl();
+        if (values.json) {
+          emitJson(res);
+        } else {
+          io.stdout(String(res.url ?? ''));
         }
         return 0;
       }
