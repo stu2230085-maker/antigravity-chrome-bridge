@@ -1,4 +1,4 @@
-# Antigravity Chrome Bridge v2.0
+# Antigravity Chrome Bridge 
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Chrome](https://img.shields.io/badge/Chrome-116%2B%20MV3-brightgreen.svg)](https://www.google.com/chrome/)
