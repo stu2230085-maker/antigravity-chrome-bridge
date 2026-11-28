@@ -314,6 +314,20 @@ describe('Antigravity Chrome Bridge v2 Full-Stack E2E', () => {
     expect(imageBlock?.mimeType).toBe('image/png');
     expect(imageBlock?.data).toMatch(/^[A-Za-z0-9+/=]+$/);
     expect(Buffer.from(imageBlock?.data ?? '', 'base64').byteLength).toBeGreaterThan(0);
+
+    const compactSnapRes = await mcpClient.callTool({
+      name: 'browser_snapshot',
+      arguments: { format: 'compact', interactiveOnly: true },
+    });
+    expect(compactSnapRes.isError).not.toBe(true);
+    const compactText = getContent(compactSnapRes)[0];
+    expect(compactText?.type === 'text' ? compactText.text : '').toContain('[@e1] textbox');
+
+    const waitRes = await mcpClient.callTool({
+      name: 'browser_wait_for',
+      arguments: { selector: '#submit-btn', timeout: 1000 },
+    });
+    expect(waitRes.isError).not.toBe(true);
   });
 
   it('supports saved workflow creation, execution, SSE real-time trace streaming, and 403 domain policy enforcement', async () => {

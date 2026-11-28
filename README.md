@@ -127,13 +127,16 @@ pnpm agb sessions
 # URL へ移動
 pnpm agb nav https://example.com
 
-# AI Snapshot を取得（--overlay で画面上に @eN バッジを描画＋画像情報付き）
+# AI Snapshot を取得（--overlay で視覚バッジ描画 / --compact で省トークン形式）
 pnpm agb snap --overlay
+pnpm agb snap --compact
 
-# @eN 参照ID または CSS セレクタで操作
+# @eN 参照ID または CSS セレクタで操作・出現待機
 pnpm agb click @e1
 pnpm agb type @e2 "Antigravity"
 pnpm agb key Enter
+pnpm agb wait "#loaded" --timeout 5000
+pnpm agb url
 
 # スクリーンショット保存（--full でフルページ）
 pnpm agb shot page.png --full
@@ -147,15 +150,15 @@ pnpm agb batch workflow.json
 <details>
 <summary>CLI グローバルオプション & 全サブコマンド</summary>
 
-- グローバルオプション: `-u, --url <httpUrl>`, `-s, --session <id>`, `-t, --token <token>`, `-j, --json`, `-h, --help`
-- サブコマンド: `status`, `sessions`, `traces`, `nav`, `snap`, `click`, `type`, `key`, `shot`, `eval`, `text`, `tabs`, `logs`, `batch`
+- グローバルオプション: `-u, --url <httpUrl>`, `-s, --session <id>`, `-t, --token <token>`, `-j, --json`, `--compact`, `-h, --help`
+- サブコマンド: `status`, `sessions`, `traces`, `nav`, `snap`, `click`, `type`, `key`, `wait`, `shot`, `eval`, `text`, `url`, `tabs`, `logs`, `batch`
 - 環境変数: `AGB_URL`, `AGB_SESSION`, `AGB_TOKEN` にも対応しています。
 
 </details>
 
 ### 2. 公式 MCP サーバー (`@antigravity-bridge/mcp`)
 
-Claude Desktop / Cursor / Antigravity などの MCP 対応クライアントに設定を追加します（先にブリッジサーバーと Chrome 拡張を起動しておいてください）。
+Claude Desktop / Claude Code / Cursor / Antigravity などの MCP 対応クライアントに設定を追加します（先にブリッジサーバーと Chrome 拡張を起動しておいてください）。
 
 ```json
 {
@@ -172,23 +175,35 @@ Claude Desktop / Cursor / Antigravity などの MCP 対応クライアントに�
 }
 ```
 
-#### 提供 MCP ツール一覧 (13ツール)
+#### 提供 MCP ツール一覧 (全25ツール)
 
 | ツール名 | 説明 |
 |:---|:---|
 | `browser_status` | ブリッジ接続状態・セッション一覧・直近トレース取得 |
 | `browser_navigate` | 指定 URL へ遷移 |
-| `browser_snapshot` | AI DOM Snapshot (`@eN`) 取得（`markOverlay: true` で画像も返却） |
-| `browser_click` | `@eN` 参照または CSS セレクタをクリック (`auto`/`scripting`/`cdp`) |
-| `browser_type` | `@eN` 参照または CSS セレクタへテキスト入力 |
+| `browser_snapshot` | AI DOM Snapshot (`@eN`, Shadow DOM対応, `format: "compact"` で省トークン出力, `markOverlay: true` で画像返却) |
+| `browser_click` | `@eN` 参照または CSS セレクタをクリック (`auto` 自動CDPフォールバック対応) |
+| `browser_type` | `@eN` 参照または CSS セレクタへテキスト入力 (`auto` 自動CDPフォールバック対応) |
 | `browser_press_key` | CDP 経由の信頼済みキー入力（修飾キー対応） |
+| `browser_hover` | `@eN` 参照または CSS セレクタにホバー |
+| `browser_select` | `<select>` ドロップダウンの値を選択 |
 | `browser_scroll` | 方向・座標・要素指定でスクロール |
+| `browser_wait_for` | 指定セレクタの DOM 出現を待機 |
+| `browser_get_text` | ページ全体または指定セレクタの可視テキストを取得 |
+| `browser_upload_file` | CDP 経由でファイル入力要素へローカルファイルを設定 |
+| `browser_drag_and_drop` | CDP 経由で要素/座標間のドラッグ＆ドロップを実行 |
 | `browser_screenshot` | Viewport / フルページ / 要素クロップのスクリーンショット取得 |
-| `browser_evaluate` | タブ内で JavaScript を実行 |
+| `browser_evaluate` | タブ内で CDP `Runtime.evaluate` 経由の非同期 JavaScript を実行 |
 | `browser_tabs` | 開いているタブとタブグループ一覧を取得 |
+| `browser_new_tab` | 新しいタブを開く |
+| `browser_close_tab` | 指定またはアクティブなタブを閉じる |
+| `browser_switch_tab` | 指定 `tabId` のタブへ切り替え |
+| `browser_reload` | タブをリロード |
+| `browser_go_back` | ブラウザ履歴を戻る |
 | `browser_console_logs` | CDP で収集したコンソールログを取得 |
 | `browser_network_logs` | CDP で収集したネットワーク通信ログを取得 |
 | `browser_batch` | 複数コマンドを順次実行 (`POST /api/v2/batch`) |
+| `browser_workflows` | 保存済みワークフローの一覧取得・ID指定実行 |
 
 ### 3. TypeScript SDK (`@antigravity-bridge/sdk`)
 
@@ -334,7 +349,9 @@ Chrome ツールバーの拡張機能アイコンのコンテキストメニュ�
 | `AGB_WS_REQUIRE_TOKEN` | `false` | `true` の場合、WebSocket 接続時にも `?token=` または `Authorization` でトークン検証を実施 |
 | `AGB_ALLOWED_DOMAINS` | 未設定 | カンマ区切りの許可ドメイン（例: `example.com,*.internal.local`）。設定時は一致ドメインのみ遷移許可 |
 | `AGB_BLOCKED_DOMAINS` | 未設定 | カンマ区切りの拒否ドメイン（許可リストより優先してブロック） |
-| `AGB_ALLOW_FILE_URLS` | `false` | `true` の場合のみ `file://` URL への遷移を許可 |
+| `AGB_ALLOW_FILE_URLS` | `false` | `true` の場合のみ `file://` URL への遷移を許可（`data:` / `blob:` / `chrome:` 等は常時ブロック） |
+| `AGB_ALLOWED_ORIGINS` | 未設定 | 追加許可するブラウザ `Origin`（既定で `chrome-extension://*` とローカルループバックのみ許可し外部サイトの CSRF を遮断） |
+| `AGB_TRUST_PROXY` | `false` | `true` の場合のみレート制限で `X-Forwarded-For` / `X-Real-IP` を信頼 |
 | `AGB_RATE_LIMIT_PER_MIN` | `600` | IP あたり 1 分間の HTTP API リクエスト上限 |
 | `AGB_WORKFLOWS_FILE` | 未設定 | 保存済みワークフローの JSON 永続化ファイルパス（未設定時はインメモリ） |
 
@@ -344,6 +361,21 @@ AGB_ALLOWED_DOMAINS="example.com,*.github.com" \
 AGB_RATE_LIMIT_PER_MIN=300 \
 pnpm start
 ```
+
+---
+
+## 🤝 マルチエージェント協調 & GitHub Discussions 連携
+
+本リポジトリは Antigravity・Claude Opus / Claude Code・Codex・Copilot などの複数モデル間で設計議論（ADR）・コンテキスト引き継ぎを行えるよう整備されています。
+
+- 開発規約・拡張境界: [AGENTS.md](AGENTS.md)
+- Claude Opus アーキテクチャ/セキュリティ監査ガイド: [CLAUDE.md](CLAUDE.md)
+- Antigravity / クラウドエージェント運用ポリシー: [GEMINI.md](GEMINI.md)
+- Discussions 読み書き補助 CLI（シェルエスケープ不要）:
+  ```bash
+  node scripts/agent-discussions.mjs list
+  node scripts/agent-discussions.mjs view 1
+  ```
 
 ---
 

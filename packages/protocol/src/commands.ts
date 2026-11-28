@@ -201,6 +201,8 @@ export const SnapshotParamsSchema = TabTargetParams.extend({
   interactiveOnly: z.boolean().optional(),
   markOverlay: z.boolean().optional(),
   maxElements: z.number().int().positive().optional(),
+  includeShadowDom: z.boolean().optional(),
+  allFrames: z.boolean().optional(),
 });
 
 export const ClearMarksParamsSchema = TabTargetParams;
@@ -346,3 +348,35 @@ export const HttpCommandRequestSchema = z.object({
 });
 
 export type HttpCommandRequest = z.infer<typeof HttpCommandRequestSchema>;
+
+export type CommandValidationResult =
+  | { ok: true; data: TypedCommand }
+  | { ok: false; error: string };
+
+export function validateTypedCommand(
+  action: string,
+  params: Record<string, unknown> = {},
+): CommandValidationResult {
+  const parsedAction = CommandActionSchema.safeParse(action);
+  if (!parsedAction.success) {
+    return {
+      ok: false,
+      error: `Unknown command action "${action}"`,
+    };
+  }
+
+  const parsedCommand = TypedCommandSchema.safeParse({
+    action: parsedAction.data,
+    params,
+  });
+  if (!parsedCommand.success) {
+    const issue = parsedCommand.error.issues[0];
+    const field = issue && issue.path.length > 1 ? ` (${issue.path.slice(1).join('.')})` : '';
+    return {
+      ok: false,
+      error: `Invalid parameters for "${action}"${field}: ${issue?.message ?? 'validation failed'}`,
+    };
+  }
+
+  return { ok: true, data: parsedCommand.data };
+}

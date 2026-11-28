@@ -4,6 +4,7 @@ import {
   type BatchStep,
   DEFAULT_HOST,
   DEFAULT_HTTP_PORT,
+  formatCompactSnapshot,
   type SnapshotElement,
 } from '@antigravity-bridge/protocol';
 import { AntigravityBridgeClient, BridgeClientError } from '@antigravity-bridge/sdk';
@@ -34,10 +35,12 @@ Commands:
   sessions                            List connected extension sessions
   traces [--limit <n>]                Show recent command traces
   nav <url>                           Navigate active tab to URL
-  snap [--all] [--overlay]            Capture AI DOM snapshot (@eN refs)
+  snap [--all] [--overlay] [--compact]
+                                      Capture AI DOM snapshot (@eN refs)
   click <target> [--cdp]              Click @eN ref or CSS selector
   type <target> <text> [--append]     Type text into @eN ref or CSS selector
   key <key>                           Press keyboard key via CDP
+  wait <selector> [--timeout <ms>]    Wait for CSS selector to appear
   shot [outFile] [--full] [--target]  Capture screenshot (PNG/JPEG data URL or file)
   eval <code>                         Evaluate JavaScript in active tab
   text [selector]                     Get visible text of page or element
@@ -105,10 +108,12 @@ export async function runCli(argv: string[], ioOverrides: Partial<CliIo> = {}): 
         help: { type: 'boolean', short: 'h', default: false },
         all: { type: 'boolean', short: 'a', default: false },
         overlay: { type: 'boolean', short: 'o', default: false },
+        compact: { type: 'boolean', default: false },
         cdp: { type: 'boolean', default: false },
         append: { type: 'boolean', default: false },
         full: { type: 'boolean', default: false },
         target: { type: 'string' },
+        timeout: { type: 'string' },
         network: { type: 'boolean', default: false },
         errors: { type: 'boolean', default: false },
         clear: { type: 'boolean', default: false },
@@ -129,10 +134,12 @@ export async function runCli(argv: string[], ioOverrides: Partial<CliIo> = {}): 
     help: boolean;
     all: boolean;
     overlay: boolean;
+    compact: boolean;
     cdp: boolean;
     append: boolean;
     full: boolean;
     target?: string;
+    timeout?: string;
     network: boolean;
     errors: boolean;
     clear: boolean;
@@ -232,6 +239,14 @@ export async function runCli(argv: string[], ioOverrides: Partial<CliIo> = {}): 
         });
         if (values.json) {
           emitJson(res);
+        } else if (values.compact) {
+          io.stdout(
+            formatCompactSnapshot({
+              url: res.url,
+              title: res.title,
+              elements: res.elements ?? [],
+            }),
+          );
         } else {
           io.stdout(`${res.title || '(untitled)'} — ${res.url} (${res.count} elements)`);
           for (const el of res.elements) {
@@ -286,6 +301,30 @@ export async function runCli(argv: string[], ioOverrides: Partial<CliIo> = {}): 
           emitJson(res);
         } else {
           io.stdout(`Pressed ${key}`);
+        }
+        return 0;
+      }
+
+      case 'wait': {
+        const selector = args[0];
+        if (!selector) {
+          io.stderr('Usage: agb wait <selector> [--timeout <ms>]');
+          return 1;
+        }
+        let timeoutMs: number | undefined;
+        if (values.timeout !== undefined) {
+          const parsedTimeout = Number(values.timeout);
+          if (!Number.isInteger(parsedTimeout) || parsedTimeout <= 0) {
+            io.stderr('Error: --timeout must be a positive integer (milliseconds)');
+            return 1;
+          }
+          timeoutMs = parsedTimeout;
+        }
+        const res = await client.waitFor(selector, timeoutMs);
+        if (values.json) {
+          emitJson(res);
+        } else {
+          io.stdout(`Matched ${selector}`);
         }
         return 0;
       }

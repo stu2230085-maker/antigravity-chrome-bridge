@@ -20,7 +20,8 @@
     "lint:fix": "biome check --write .",
     "package:extension": "pnpm --filter @antigravity-bridge/extension build && node scripts/package-extension.mjs",
     "agb": "node packages/cli/dist/bin.js",
-    "mcp": "node packages/mcp/dist/bin.js"
+    "mcp": "node packages/mcp/dist/bin.js",
+    "discuss": "node scripts/agent-discussions.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.0.0",

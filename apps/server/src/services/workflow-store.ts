@@ -1,5 +1,5 @@
 import crypto from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import {
   type SavedWorkflow,
@@ -88,6 +88,8 @@ export class WorkflowStore {
     }
 
     mkdirSync(dirname(this.filePath), { recursive: true });
-    writeFileSync(this.filePath, JSON.stringify(this.list(), null, 2), 'utf8');
+    const tmpPath = `${this.filePath}.${process.pid}.tmp`;
+    writeFileSync(tmpPath, JSON.stringify(this.list(), null, 2), 'utf8');
+    renameSync(tmpPath, this.filePath);
   }
 }

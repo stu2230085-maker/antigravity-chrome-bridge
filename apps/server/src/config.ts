@@ -21,6 +21,8 @@ export interface ServerConfig {
   blockedDomains?: string[];
   allowFileUrls?: boolean;
   rateLimitPerMin?: number;
+  trustProxy?: boolean;
+  allowedOrigins?: string[];
 }
 
 function parseDomainList(raw?: string): string[] | undefined {
@@ -30,6 +32,15 @@ function parseDomainList(raw?: string): string[] | undefined {
     .map((item) => item.trim().toLowerCase())
     .filter((item) => item.length > 0);
   return patterns.length > 0 ? patterns : undefined;
+}
+
+function parseOriginList(raw?: string): string[] | undefined {
+  if (!raw) return undefined;
+  const origins = raw
+    .split(',')
+    .map((item) => item.trim().replace(/\/+$/, '').toLowerCase())
+    .filter((item) => item.length > 0);
+  return origins.length > 0 ? origins : undefined;
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
@@ -51,6 +62,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
   const rawRateLimit = Number(env.AGB_RATE_LIMIT_PER_MIN);
   const rateLimitPerMin =
     Number.isFinite(rawRateLimit) && rawRateLimit > 0 ? Math.floor(rawRateLimit) : 600;
+  const trustProxy = env.AGB_TRUST_PROXY === 'true';
+  const allowedOrigins = parseOriginList(env.AGB_ALLOWED_ORIGINS);
 
   return {
     host: env.HOST || DEFAULT_HOST,
@@ -73,5 +86,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): ServerConfig {
     blockedDomains,
     allowFileUrls,
     rateLimitPerMin,
+    trustProxy,
+    allowedOrigins,
   };
 }

@@ -62,6 +62,8 @@ describe('@antigravity-bridge/cli', () => {
     expect(code).toBe(0);
     expect(err).toEqual([]);
     expect(out.join('\n')).toContain('agb — Antigravity Chrome Bridge CLI');
+    expect(out.join('\n')).toContain('--compact');
+    expect(out.join('\n')).toContain('wait <selector> [--timeout <ms>]');
 
     expect(
       formatSnapshotElement({
@@ -217,7 +219,15 @@ describe('@antigravity-bridge/cli', () => {
       expect(snapCmd?.params).toMatchObject({ interactiveOnly: false, markOverlay: true });
     }
 
-    // click --cdp & type --append & key
+    // snap --compact
+    {
+      const mem = createMemoryIo();
+      expect(await runCli(['--url', baseUrl, 'snap', '--compact'], mem.io)).toBe(0);
+      expect(mem.out.join('\n')).toContain('Page: Example (https://example.com)');
+      expect(mem.out.join('\n')).toContain('[@e1] button "Submit" @(10,20 100x30)');
+    }
+
+    // click --cdp & type --append & key & wait
     {
       const mem = createMemoryIo();
       expect(await runCli(['--url', baseUrl, 'click', '@e1', '--cdp'], mem.io)).toBe(0);
@@ -225,6 +235,10 @@ describe('@antigravity-bridge/cli', () => {
         0,
       );
       expect(await runCli(['--url', baseUrl, 'key', 'Enter'], mem.io)).toBe(0);
+      expect(await runCli(['--url', baseUrl, 'wait', '.loaded', '--timeout', '2000'], mem.io)).toBe(
+        0,
+      );
+      expect(mem.out.join('\n')).toContain('Matched .loaded');
       expect(commandsSeen.find((c) => c.action === 'click')?.params).toMatchObject({
         ref: '@e1',
         engine: 'cdp',
@@ -236,6 +250,10 @@ describe('@antigravity-bridge/cli', () => {
       });
       expect(commandsSeen.find((c) => c.action === 'press_key')?.params).toMatchObject({
         key: 'Enter',
+      });
+      expect(commandsSeen.find((c) => c.action === 'wait_for')?.params).toMatchObject({
+        selector: '.loaded',
+        timeout: 2000,
       });
     }
 

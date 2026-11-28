@@ -21,36 +21,67 @@ export async function cmdClick(params: Record<string, unknown>): Promise<Command
   const tab = await resolveTab(params);
   if (tab.id === undefined) return { success: false, error: 'Resolved tab has no ID' };
 
-  const results = await chrome.scripting.executeScript({
-    target: { tabId: tab.id, allFrames },
-    func: (sel: string): FoundOutcome => {
-      const el = document.querySelector<HTMLElement>(sel);
-      if (!el) return { found: false, error: `Element not found: ${sel}` };
+  const canFallbackToCdp =
+    params.engine !== 'scripting' &&
+    typeof chrome !== 'undefined' &&
+    Boolean(chrome.debugger?.sendCommand);
 
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  let results: Array<{ result?: unknown }>;
+  try {
+    results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id, allFrames },
+      func: (sel: string): FoundOutcome => {
+        const queryDeep = (root: Document | ShadowRoot, selectorStr: string): Element | null => {
+          const direct = root.querySelector(selectorStr);
+          if (direct) return direct;
+          const hosts = root.querySelectorAll('*');
+          for (const host of hosts) {
+            if (host.shadowRoot) {
+              const found = queryDeep(host.shadowRoot, selectorStr);
+              if (found) return found;
+            }
+          }
+          return null;
+        };
 
-      const origOutline = el.style.outline;
-      el.style.outline = '3px solid #4285f4';
-      setTimeout(() => {
-        el.style.outline = origOutline;
-      }, 500);
+        const el = queryDeep(document, sel) as HTMLElement | null;
+        if (!el) return { found: false, error: `Element not found: ${sel}` };
 
-      el.click();
-      return {
-        found: true,
-        tagName: el.tagName,
-        text: el.textContent?.slice(0, 100),
-        frameUrl: location.href,
-      };
-    },
-    args: [selector],
-  });
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+        const origOutline = el.style.outline;
+        el.style.outline = '3px solid #4285f4';
+        setTimeout(() => {
+          el.style.outline = origOutline;
+        }, 500);
+
+        el.click();
+        return {
+          found: true,
+          tagName: el.tagName,
+          text: el.textContent?.slice(0, 100),
+          frameUrl: location.href,
+        };
+      },
+      args: [selector],
+    });
+  } catch (err) {
+    if (canFallbackToCdp) {
+      return await cdpClick(params);
+    }
+    throw err;
+  }
 
   const matched = results.find((r) => (r.result as FoundOutcome | undefined)?.found)?.result as
     | FoundOutcome
     | undefined;
   const result = matched ?? (results[0]?.result as FoundOutcome | undefined);
-  if (!result?.found) return { success: false, error: result?.error || 'Click failed' };
+  if (!result?.found) {
+    if (canFallbackToCdp) {
+      return await cdpClick(params);
+    }
+    return { success: false, error: result?.error || 'Click failed' };
+  }
   return { success: true, ...result };
 }
 
@@ -116,36 +147,67 @@ export async function cmdType(params: Record<string, unknown>): Promise<CommandR
   const tab = await resolveTab(params);
   if (tab.id === undefined) return { success: false, error: 'Resolved tab has no ID' };
 
-  const results = await chrome.scripting.executeScript({
-    target: { tabId: tab.id, allFrames },
-    func: (sel: string, txt: string, shouldClear: boolean): FoundOutcome => {
-      const el = document.querySelector<HTMLInputElement | HTMLTextAreaElement>(sel);
-      if (!el) return { found: false, error: `Element not found: ${sel}` };
+  const canFallbackToCdp =
+    params.engine !== 'scripting' &&
+    typeof chrome !== 'undefined' &&
+    Boolean(chrome.debugger?.sendCommand);
 
-      el.focus();
-      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  let results: Array<{ result?: unknown }>;
+  try {
+    results = await chrome.scripting.executeScript({
+      target: { tabId: tab.id, allFrames },
+      func: (sel: string, txt: string, shouldClear: boolean): FoundOutcome => {
+        const queryDeep = (root: Document | ShadowRoot, selectorStr: string): Element | null => {
+          const direct = root.querySelector(selectorStr);
+          if (direct) return direct;
+          const hosts = root.querySelectorAll('*');
+          for (const host of hosts) {
+            if (host.shadowRoot) {
+              const found = queryDeep(host.shadowRoot, selectorStr);
+              if (found) return found;
+            }
+          }
+          return null;
+        };
 
-      const nextValue = shouldClear ? txt : `${el.value}${txt}`;
-      const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value');
-      if (descriptor?.set) {
-        descriptor.set.call(el, nextValue);
-      } else {
-        el.value = nextValue;
-      }
+        const el = queryDeep(document, sel) as HTMLInputElement | HTMLTextAreaElement | null;
+        if (!el) return { found: false, error: `Element not found: ${sel}` };
 
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-      el.dispatchEvent(new Event('change', { bubbles: true }));
+        el.focus();
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-      return { found: true, tagName: el.tagName };
-    },
-    args: [selector, text, clear],
-  });
+        const nextValue = shouldClear ? txt : `${el.value}${txt}`;
+        const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el), 'value');
+        if (descriptor?.set) {
+          descriptor.set.call(el, nextValue);
+        } else {
+          el.value = nextValue;
+        }
+
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+
+        return { found: true, tagName: el.tagName };
+      },
+      args: [selector, text, clear],
+    });
+  } catch (err) {
+    if (canFallbackToCdp) {
+      return await cdpType(params);
+    }
+    throw err;
+  }
 
   const matched = results.find((r) => (r.result as FoundOutcome | undefined)?.found)?.result as
     | FoundOutcome
     | undefined;
   const result = matched ?? (results[0]?.result as FoundOutcome | undefined);
-  if (!result?.found) return { success: false, error: result?.error || 'Type failed' };
+  if (!result?.found) {
+    if (canFallbackToCdp) {
+      return await cdpType(params);
+    }
+    return { success: false, error: result?.error || 'Type failed' };
+  }
   return { success: true, ...result };
 }
 
@@ -160,7 +222,20 @@ export async function cmdHover(params: Record<string, unknown>): Promise<Command
   const results = await chrome.scripting.executeScript({
     target: { tabId: tab.id, allFrames },
     func: (sel: string): FoundOutcome => {
-      const el = document.querySelector<HTMLElement>(sel);
+      const queryDeep = (root: Document | ShadowRoot, selectorStr: string): Element | null => {
+        const direct = root.querySelector(selectorStr);
+        if (direct) return direct;
+        const hosts = root.querySelectorAll('*');
+        for (const host of hosts) {
+          if (host.shadowRoot) {
+            const found = queryDeep(host.shadowRoot, selectorStr);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+
+      const el = queryDeep(document, sel) as HTMLElement | null;
       if (!el) return { found: false, error: `Element not found: ${sel}` };
 
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -198,7 +273,20 @@ export async function cmdSelect(params: Record<string, unknown>): Promise<Comman
   const results = await chrome.scripting.executeScript({
     target: { tabId: tab.id },
     func: (sel: string, val: string): FoundOutcome => {
-      const el = document.querySelector<HTMLSelectElement>(sel);
+      const queryDeep = (root: Document | ShadowRoot, selectorStr: string): Element | null => {
+        const direct = root.querySelector(selectorStr);
+        if (direct) return direct;
+        const hosts = root.querySelectorAll('*');
+        for (const host of hosts) {
+          if (host.shadowRoot) {
+            const found = queryDeep(host.shadowRoot, selectorStr);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+
+      const el = queryDeep(document, sel) as HTMLSelectElement | null;
       if (!el) return { found: false, error: `Element not found: ${sel}` };
       if (el.tagName !== 'SELECT') return { found: false, error: 'Element is not a <select>' };
 
@@ -234,10 +322,23 @@ export async function cmdScroll(params: Record<string, unknown>): Promise<Comman
       dir: string | null,
       amt: number,
     ): CommandResult => {
+      const queryDeep = (root: Document | ShadowRoot, selectorStr: string): Element | null => {
+        const direct = root.querySelector(selectorStr);
+        if (direct) return direct;
+        const hosts = root.querySelectorAll('*');
+        for (const host of hosts) {
+          if (host.shadowRoot) {
+            const found = queryDeep(host.shadowRoot, selectorStr);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+
       let target: Window | Element = window;
 
       if (sel) {
-        const el = document.querySelector(sel);
+        const el = queryDeep(document, sel);
         if (!el) return { success: false, error: `Element not found: ${sel}` };
         target = el;
       }

@@ -81,7 +81,20 @@ async function getElementBounds(tabId: number, selector: string): Promise<RectCe
   const results = await chrome.scripting.executeScript({
     target: { tabId },
     func: (sel: string): RectCenterResult => {
-      const el = document.querySelector<HTMLElement>(sel);
+      const queryDeep = (root: Document | ShadowRoot, selectorStr: string): Element | null => {
+        const direct = root.querySelector(selectorStr);
+        if (direct) return direct;
+        const hosts = root.querySelectorAll('*');
+        for (const host of hosts) {
+          if (host.shadowRoot) {
+            const found = queryDeep(host.shadowRoot, selectorStr);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+
+      const el = queryDeep(document, sel) as HTMLElement | null;
       if (!el) return { found: false, error: `Element not found: ${sel}` };
       el.scrollIntoView({ behavior: 'instant', block: 'center', inline: 'center' });
       const r = el.getBoundingClientRect();
@@ -113,7 +126,20 @@ async function focusElement(tabId: number, selector: string, clear = false): Pro
   const results = await chrome.scripting.executeScript({
     target: { tabId },
     func: (sel: string, shouldClear: boolean): { found: boolean; error?: string } => {
-      const el = document.querySelector<HTMLElement>(sel);
+      const queryDeep = (root: Document | ShadowRoot, selectorStr: string): Element | null => {
+        const direct = root.querySelector(selectorStr);
+        if (direct) return direct;
+        const hosts = root.querySelectorAll('*');
+        for (const host of hosts) {
+          if (host.shadowRoot) {
+            const found = queryDeep(host.shadowRoot, selectorStr);
+            if (found) return found;
+          }
+        }
+        return null;
+      };
+
+      const el = queryDeep(document, sel) as HTMLElement | null;
       if (!el) return { found: false, error: `Element not found: ${sel}` };
       el.scrollIntoView({ behavior: 'instant', block: 'center' });
       el.focus();

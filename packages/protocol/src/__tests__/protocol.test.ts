@@ -10,12 +10,15 @@ import {
   DEFAULT_HOST,
   DEFAULT_HTTP_PORT,
   DEFAULT_WS_PORT,
+  DEFAULT_WS_URL,
   ExtensionToServerMessageSchema,
+  formatCompactSnapshot,
   HelloMessageSchema,
   HttpCommandRequestSchema,
   ServerToExtensionMessageSchema,
   TAB_GROUP_TITLE,
   TypedCommandSchema,
+  validateTypedCommand,
   WsCommandEnvelopeSchema,
   WsCommandResponseSchema,
 } from '../index.js';
@@ -25,6 +28,7 @@ describe('@antigravity-bridge/protocol', () => {
     expect(DEFAULT_HOST).toBe('127.0.0.1');
     expect(DEFAULT_HTTP_PORT).toBe(8766);
     expect(DEFAULT_WS_PORT).toBe(8767);
+    expect(DEFAULT_WS_URL).toBe('ws://127.0.0.1:8767');
     expect(DEFAULT_COMMAND_TIMEOUT_MS).toBe(30000);
     expect(TAB_GROUP_TITLE).toBe('🤖 Antigravity');
   });
@@ -220,5 +224,44 @@ describe('@antigravity-bridge/protocol', () => {
     expect(ServerToExtensionMessageSchema.parse({ type: 'pong', timestamp: 1234 })).toMatchObject({
       type: 'pong',
     });
+  });
+
+  it('validates commands cleanly via validateTypedCommand and formats compact snapshots', () => {
+    const okRes = validateTypedCommand('snapshot', {
+      interactiveOnly: true,
+      includeShadowDom: true,
+      allFrames: false,
+    });
+    expect(okRes.ok).toBe(true);
+
+    const badAction = validateTypedCommand('non_existent');
+    expect(badAction).toEqual({
+      ok: false,
+      error: 'Unknown command action "non_existent"',
+    });
+
+    const badParams = validateTypedCommand('click', {});
+    expect(badParams.ok).toBe(false);
+    if (!badParams.ok) {
+      expect(badParams.error).toContain('Invalid parameters for "click"');
+    }
+
+    const compact = formatCompactSnapshot({
+      url: 'https://example.com',
+      title: 'Example',
+      elements: [
+        {
+          ref: '@e1',
+          role: 'button',
+          tagName: 'button',
+          label: 'Submit',
+          text: 'Submit',
+          visible: true,
+          rect: { x: 10, y: 20, width: 100, height: 40 },
+        },
+      ],
+    });
+    expect(compact).toContain('Page: Example (https://example.com)');
+    expect(compact).toContain('[@e1] button "Submit" @(10,20 100x40)');
   });
 });

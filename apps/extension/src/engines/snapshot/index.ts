@@ -34,16 +34,20 @@ export async function cmdSnapshot(params: Record<string, unknown>): Promise<Comm
     typeof params.maxElements === 'number' && params.maxElements > 0
       ? Math.floor(params.maxElements)
       : 150;
+  const includeShadowDom =
+    params.includeShadowDom === undefined ? true : Boolean(params.includeShadowDom);
+  const allFrames = Boolean(params.allFrames);
 
   const tab = await resolveTab(params);
   if (tab.id === undefined) return { success: false, error: 'Resolved tab has no ID' };
 
   const results = await chrome.scripting.executeScript({
-    target: { tabId: tab.id },
+    target: { tabId: tab.id, ...(allFrames ? { allFrames: true } : {}) },
     func: (
       onlyInteractive: boolean,
       renderOverlay: boolean,
       limit: number,
+      withShadowDom: boolean,
     ): SnapshotScriptResult => {
       const OVERLAY_ID = '__agb_som_overlay__';
       const existingOverlay = document.getElementById(OVERLAY_ID);
@@ -51,10 +55,19 @@ export async function cmdSnapshot(params: Record<string, unknown>): Promise<Comm
         existingOverlay.remove();
       }
 
-      const previousRefs = document.querySelectorAll('[data-agb-ref]');
-      for (const el of previousRefs) {
-        el.removeAttribute('data-agb-ref');
-      }
+      const clearPreviousRefs = (root: Document | ShadowRoot): void => {
+        const previousRefs = root.querySelectorAll('[data-agb-ref]');
+        for (const el of previousRefs) {
+          el.removeAttribute('data-agb-ref');
+        }
+        const hosts = root.querySelectorAll('*');
+        for (const host of hosts) {
+          if (host.shadowRoot) {
+            clearPreviousRefs(host.shadowRoot);
+          }
+        }
+      };
+      clearPreviousRefs(document);
 
       const interactiveSelectors = [
         'a[href]',
@@ -72,7 +85,24 @@ export async function cmdSnapshot(params: Record<string, unknown>): Promise<Comm
         ? interactiveSelectors.join(', ')
         : [...interactiveSelectors, ...semanticSelectors].join(', ');
 
-      const rawElements = Array.from(document.querySelectorAll<HTMLElement>(query));
+      const rawElements: HTMLElement[] = [];
+      const collectElements = (root: Document | ShadowRoot): void => {
+        if (!withShadowDom) {
+          rawElements.push(...Array.from(root.querySelectorAll<HTMLElement>(query)));
+          return;
+        }
+        const nodes = root.querySelectorAll('*');
+        for (const node of nodes) {
+          if (node.matches(query)) {
+            rawElements.push(node as HTMLElement);
+          }
+          if (node.shadowRoot) {
+            collectElements(node.shadowRoot);
+          }
+        }
+      };
+      collectElements(document);
+
       const seen = new Set<HTMLElement>();
       const collected: SnapshotElement[] = [];
 
@@ -103,18 +133,27 @@ export async function cmdSnapshot(params: Record<string, unknown>): Promise<Comm
         const ariaLabel = el.getAttribute('aria-label')?.trim();
         if (ariaLabel) return ariaLabel;
 
+        const rootNode = el.getRootNode();
+        const scope =
+          rootNode instanceof Document || rootNode instanceof ShadowRoot ? rootNode : document;
+
         const labelledBy = el.getAttribute('aria-labelledby');
         if (labelledBy) {
           const labelText = labelledBy
             .split(/\s+/)
-            .map((id) => document.getElementById(id)?.innerText?.trim() ?? '')
+            .map((id) => {
+              const refEl =
+                scope.querySelector<HTMLElement>(`#${CSS.escape(id)}`) ??
+                document.getElementById(id);
+              return refEl?.innerText?.trim() ?? '';
+            })
             .filter(Boolean)
             .join(' ');
           if (labelText) return labelText;
         }
 
         if (el.id) {
-          const explicitLabel = document.querySelector<HTMLLabelElement>(
+          const explicitLabel = scope.querySelector<HTMLLabelElement>(
             `label[for="${CSS.escape(el.id)}"]`,
           );
           const text = explicitLabel?.innerText?.trim();
@@ -242,10 +281,39 @@ export async function cmdSnapshot(params: Record<string, unknown>): Promise<Comm
         overlayRendered: Boolean(overlayContainer),
       };
     },
-    args: [interactiveOnly, markOverlay, maxElements],
+    args: [interactiveOnly, markOverlay, maxElements, includeShadowDom],
   });
 
-  const result = results[0]?.result as SnapshotScriptResult | undefined;
+  let result: SnapshotScriptResult | undefined;
+  if (allFrames) {
+    const frameResults = results
+      .map((r) => r.result as SnapshotScriptResult | undefined)
+      .filter((r): r is SnapshotScriptResult => Boolean(r));
+    if (frameResults.length > 0) {
+      const mergedElements: SnapshotElement[] = [];
+      let overlayRendered = false;
+      for (const frameRes of frameResults) {
+        overlayRendered = overlayRendered || frameRes.overlayRendered;
+        for (const el of frameRes.elements) {
+          if (mergedElements.length >= maxElements) break;
+          mergedElements.push(el);
+        }
+        if (mergedElements.length >= maxElements) break;
+      }
+      const topFrame = frameResults[0];
+      if (topFrame) {
+        result = {
+          url: topFrame.url,
+          title: topFrame.title,
+          elements: mergedElements,
+          overlayRendered,
+        };
+      }
+    }
+  } else {
+    result = results[0]?.result as SnapshotScriptResult | undefined;
+  }
+
   if (!result) {
     return { success: false, error: 'Snapshot failed' };
   }

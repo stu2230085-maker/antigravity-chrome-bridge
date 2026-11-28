@@ -19,6 +19,7 @@ const statusDetails = $<HTMLDivElement>('#statusDetails');
 const profileBadge = $<HTMLDivElement>('#profileBadge');
 const serverUrlInput = $<HTMLInputElement>('#serverUrl');
 const profileNameInput = $<HTMLInputElement>('#profileName');
+const authTokenInput = $<HTMLInputElement>('#authToken');
 const connectBtn = $<HTMLButtonElement>('#connectBtn');
 const disconnectBtn = $<HTMLButtonElement>('#disconnectBtn');
 const openSidePanelBtn = $<HTMLButtonElement>('#openSidePanelBtn');
@@ -70,11 +71,13 @@ async function init(): Promise<void> {
   const stored = await chrome.storage.local.get({
     serverUrl: DEFAULT_WS_URL,
     profileName: 'default',
+    authToken: '',
   });
   serverUrlInput.value =
     typeof stored.serverUrl === 'string' && stored.serverUrl ? stored.serverUrl : DEFAULT_WS_URL;
   profileNameInput.value =
     typeof stored.profileName === 'string' && stored.profileName ? stored.profileName : 'default';
+  authTokenInput.value = typeof stored.authToken === 'string' ? stored.authToken : '';
 
   try {
     const win = await chrome.windows?.getCurrent();
@@ -93,6 +96,7 @@ connectBtn.addEventListener('click', () => {
     return;
   }
   const profileName = profileNameInput.value.trim() || 'default';
+  const authToken = authTokenInput.value.trim();
 
   connectBtn.disabled = true;
   connectBtn.textContent = '接続中...';
@@ -102,6 +106,7 @@ connectBtn.addEventListener('click', () => {
       type: 'connect',
       serverUrl: url,
       profileName,
+      authToken,
     },
     () => {
       setTimeout(refreshStatus, 1000);
@@ -142,6 +147,11 @@ serverUrlInput.addEventListener('change', () => {
 profileNameInput.addEventListener('change', () => {
   const profileName = profileNameInput.value.trim() || 'default';
   chrome.runtime.sendMessage({ type: 'update_profile_name', profileName });
+});
+
+authTokenInput.addEventListener('change', () => {
+  const authToken = authTokenInput.value.trim();
+  chrome.runtime.sendMessage({ type: 'update_auth_token', authToken });
 });
 
 chrome.runtime.onMessage.addListener((message: { type?: string } & StatusPayload) => {

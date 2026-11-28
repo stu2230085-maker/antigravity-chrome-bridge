@@ -3,6 +3,7 @@ import {
   type BatchStep,
   type BatchStepResult,
   HttpCommandRequestSchema,
+  validateTypedCommand,
   WorkflowRunRequestSchema,
   WorkflowUpsertSchema,
 } from '@antigravity-bridge/protocol';
@@ -10,6 +11,7 @@ import { Hono } from 'hono';
 import type { Logger } from '../logger.js';
 import {
   createAuthMiddleware,
+  createCsrfAndOriginMiddleware,
   createRateLimitMiddleware,
   type SecurityConfig,
   validateCommandPolicy,
@@ -112,6 +114,20 @@ function findPolicyViolation(
   return null;
 }
 
+function findInvalidStep(
+  steps: BatchStep[],
+): { index: number; action: string; error: string } | null {
+  for (let i = 0; i < steps.length; i++) {
+    const step = steps[i];
+    if (!step) continue;
+    const stepCheck = validateTypedCommand(step.action, step.params ?? {});
+    if (!stepCheck.ok) {
+      return { index: i, action: step.action, error: stepCheck.error };
+    }
+  }
+  return null;
+}
+
 export function createApiApp(
   sessionManager: SessionManager,
   traceStore: TraceStore,
@@ -125,11 +141,12 @@ export function createApiApp(
   const resolvedDashboardDir = resolveDashboardDistDir(dashboardDir);
 
   const rateLimiter = createRateLimitMiddleware(securityConfig);
+  const csrfAndOrigin = createCsrfAndOriginMiddleware(securityConfig);
   const authMiddleware = createAuthMiddleware(securityConfig);
 
-  app.use('/command', rateLimiter, authMiddleware);
-  app.use('/status', rateLimiter, authMiddleware);
-  app.use('/api/v2/*', rateLimiter, authMiddleware);
+  app.use('/command', rateLimiter, csrfAndOrigin, authMiddleware);
+  app.use('/status', rateLimiter, csrfAndOrigin, authMiddleware);
+  app.use('/api/v2/*', rateLimiter, csrfAndOrigin, authMiddleware);
 
   app.get('/', (c) => {
     return c.json({
@@ -188,6 +205,12 @@ export function createApiApp(
       return c.json({ error: policy.reason }, 403);
     }
 
+    const cmdCheck = validateTypedCommand(action, params);
+    if (!cmdCheck.ok) {
+      logger.http(`POST /command — ${cmdCheck.error}`);
+      return c.json({ error: cmdCheck.error }, 400);
+    }
+
     try {
       const outcome = await sessionManager.sendCommand(action, params, sessionId);
       logger.success(`Command ${outcome.id} completed (${action})`);
@@ -238,6 +261,21 @@ export function createApiApp(
       );
     }
 
+    const invalidStep = findInvalidStep(steps);
+    if (invalidStep) {
+      logger.http(
+        `POST /api/v2/batch — invalid step #${invalidStep.index} (${invalidStep.action}): ${invalidStep.error}`,
+      );
+      return c.json(
+        {
+          error: invalidStep.error,
+          stepIndex: invalidStep.index,
+          action: invalidStep.action,
+        },
+        400,
+      );
+    }
+
     if (!sessionManager.resolveTargetSession(sessionId)) {
       const msg = sessionId
         ? `Chrome extension session "${sessionId}" is not connected`
@@ -268,6 +306,18 @@ export function createApiApp(
     if (!parsed.success) {
       return c.json(
         { error: 'Invalid workflow payload: "name" and non-empty "steps" array are required' },
+        400,
+      );
+    }
+
+    const invalidStep = findInvalidStep(parsed.data.steps);
+    if (invalidStep) {
+      return c.json(
+        {
+          error: invalidStep.error,
+          stepIndex: invalidStep.index,
+          action: invalidStep.action,
+        },
         400,
       );
     }

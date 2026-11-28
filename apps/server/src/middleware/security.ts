@@ -4,7 +4,13 @@ import type { ServerConfig } from '../config.js';
 
 export type SecurityConfig = Pick<
   ServerConfig,
-  'authToken' | 'allowedDomains' | 'blockedDomains' | 'allowFileUrls' | 'rateLimitPerMin'
+  | 'authToken'
+  | 'allowedDomains'
+  | 'blockedDomains'
+  | 'allowFileUrls'
+  | 'rateLimitPerMin'
+  | 'trustProxy'
+  | 'allowedOrigins'
 >;
 
 export type PolicyCheckResult = { allowed: true } | { allowed: false; reason: string };
@@ -16,6 +22,16 @@ const BLOCKED_SCHEMES = new Set([
   'vbscript:',
   'devtools:',
   'edge:',
+  'data:',
+  'blob:',
+]);
+
+const LOOPBACK_HTTP_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
+
+const SIMPLE_CSRF_MEDIA_TYPES = new Set([
+  'text/plain',
+  'application/x-www-form-urlencoded',
+  'multipart/form-data',
 ]);
 
 export function tokensMatch(expected: string, actual: string | undefined | null): boolean {
@@ -30,6 +46,71 @@ function extractBearerToken(headerValue: string | undefined): string | undefined
   if (!headerValue) return undefined;
   const match = /^Bearer\s+(.+)$/i.exec(headerValue.trim());
   return match?.[1]?.trim() || undefined;
+}
+
+export function isAllowedOrigin(origin: string, allowedOrigins?: string[]): boolean {
+  const normalized = origin.trim().toLowerCase();
+  if (!normalized || normalized === 'null') {
+    return false;
+  }
+
+  if (allowedOrigins && allowedOrigins.length > 0) {
+    for (const allowed of allowedOrigins) {
+      const normalizedAllowed = allowed.trim().replace(/\/+$/, '').toLowerCase();
+      if (normalizedAllowed && normalizedAllowed !== 'null' && normalized === normalizedAllowed) {
+        return true;
+      }
+    }
+  }
+
+  if (/^chrome-extension:\/\/[a-z0-9_-]+$/.test(normalized)) {
+    return true;
+  }
+
+  let parsed: URL;
+  try {
+    parsed = new URL(normalized);
+  } catch {
+    return false;
+  }
+
+  if (
+    parsed.username !== '' ||
+    parsed.password !== '' ||
+    parsed.pathname !== '/' ||
+    parsed.search !== '' ||
+    parsed.hash !== '' ||
+    normalized.endsWith('/')
+  ) {
+    return false;
+  }
+
+  if (parsed.protocol === 'http:' && LOOPBACK_HTTP_HOSTS.has(parsed.hostname)) {
+    return true;
+  }
+
+  return false;
+}
+
+export function createCsrfAndOriginMiddleware(config: SecurityConfig = {}): MiddlewareHandler {
+  return async (c, next) => {
+    const origin = c.req.header('origin');
+    if (origin !== undefined && !isAllowedOrigin(origin, config.allowedOrigins)) {
+      return c.json({ error: `Forbidden origin: ${origin}` }, 403);
+    }
+
+    if (c.req.method.toUpperCase() === 'POST') {
+      const contentType = c.req.header('content-type');
+      if (contentType !== undefined) {
+        const mediaType = contentType.split(';')[0]?.trim().toLowerCase() ?? '';
+        if (SIMPLE_CSRF_MEDIA_TYPES.has(mediaType)) {
+          return c.json({ error: 'Unsupported Media Type: application/json is required' }, 415);
+        }
+      }
+    }
+
+    await next();
+  };
 }
 
 export function createAuthMiddleware(config: Pick<ServerConfig, 'authToken'>): MiddlewareHandler {
@@ -144,15 +225,17 @@ export function validateCommandPolicy(
   return validateUrlPolicy(rawUrl, config);
 }
 
-function getClientIp(c: Context): string {
-  const xff = c.req.header('x-forwarded-for');
-  if (xff) {
-    const first = xff.split(',')[0]?.trim();
-    if (first) return first;
-  }
+export function getClientIp(c: Context, trustProxy = false): string {
+  if (trustProxy === true) {
+    const xff = c.req.header('x-forwarded-for');
+    if (xff) {
+      const first = xff.split(',')[0]?.trim();
+      if (first) return first;
+    }
 
-  const realIp = c.req.header('x-real-ip')?.trim();
-  if (realIp) return realIp;
+    const realIp = c.req.header('x-real-ip')?.trim();
+    if (realIp) return realIp;
+  }
 
   const incoming = (c.env as { incoming?: { socket?: { remoteAddress?: string } } } | undefined)
     ?.incoming;
@@ -165,7 +248,7 @@ interface RateBucket {
 }
 
 export function createRateLimitMiddleware(
-  config: Pick<ServerConfig, 'rateLimitPerMin'>,
+  config: Pick<ServerConfig, 'rateLimitPerMin' | 'trustProxy'>,
   windowMs = 60_000,
 ): MiddlewareHandler {
   const buckets = new Map<string, RateBucket>();
@@ -178,7 +261,7 @@ export function createRateLimitMiddleware(
     }
 
     const now = Date.now();
-    const ip = getClientIp(c);
+    const ip = getClientIp(c, config.trustProxy === true);
 
     // Prevent unbounded growth on long-lived servers
     if (buckets.size > 10_000) {

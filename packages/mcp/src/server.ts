@@ -4,6 +4,7 @@ import {
   BridgeClientError,
   type ConsoleLogLevel,
   type ExecutionEngine,
+  formatCompactSnapshot,
   type KeyModifier,
 } from '@antigravity-bridge/sdk';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -97,6 +98,12 @@ export function createMcpBridgeServer(
       description:
         'Capture an AI-friendly DOM snapshot with Set-of-Mark (@eN) element references, roles, labels, and bounding boxes.',
       inputSchema: {
+        format: z
+          .enum(['json', 'compact'])
+          .optional()
+          .describe(
+            'Output format: "compact" returns a token-efficient Accessibility-Tree style summary (~75% fewer tokens); default "json"',
+          ),
         interactiveOnly: z
           .boolean()
           .optional()
@@ -111,26 +118,61 @@ export function createMcpBridgeServer(
           .positive()
           .optional()
           .describe('Maximum number of elements to return'),
+        includeShadowDom: z.boolean().optional(),
+        allFrames: z.boolean().optional(),
         tabId: z.number().int().positive().optional(),
         sessionId: z.string().min(1).optional(),
       },
     },
-    async ({ interactiveOnly, markOverlay, maxElements, tabId, sessionId }) => {
+    async ({
+      format,
+      interactiveOnly,
+      markOverlay,
+      maxElements,
+      includeShadowDom,
+      allFrames,
+      tabId,
+      sessionId,
+    }) => {
       try {
         const res = await client.snapshot({
           interactiveOnly,
           markOverlay,
           maxElements,
+          includeShadowDom,
+          allFrames,
           tabId,
           sessionId,
         });
+        const isCompact = format === 'compact';
         if (typeof res.image === 'string' && res.image.length > 0) {
           const { mimeType, data } = parseImageDataUrl(res.image);
           const { image: _omitted, ...rest } = res;
+          const text = isCompact
+            ? formatCompactSnapshot({
+                url: res.url,
+                title: res.title,
+                elements: res.elements ?? [],
+              })
+            : JSON.stringify(rest, null, 2);
           return {
             content: [
-              { type: 'text', text: JSON.stringify(rest, null, 2) },
+              { type: 'text', text },
               { type: 'image', data, mimeType },
+            ],
+          };
+        }
+        if (isCompact) {
+          return {
+            content: [
+              {
+                type: 'text',
+                text: formatCompactSnapshot({
+                  url: res.url,
+                  title: res.title,
+                  elements: res.elements ?? [],
+                }),
+              },
             ],
           };
         }
@@ -434,6 +476,312 @@ export function createMcpBridgeServer(
     async ({ steps, stopOnError, sessionId }) => {
       try {
         const res = await client.batch(steps as BatchStep[], { stopOnError, sessionId });
+        return okJson(res);
+      } catch (err) {
+        return failTool(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_wait_for',
+    {
+      title: 'Wait For Element',
+      description: 'Wait until an element matching the CSS selector appears in the DOM.',
+      inputSchema: {
+        selector: z.string().min(1).describe('CSS selector to wait for'),
+        timeout: z.number().int().positive().optional().describe('Timeout in milliseconds'),
+        tabId: z.number().int().positive().optional(),
+        sessionId: z.string().min(1).optional(),
+      },
+    },
+    async ({ selector, timeout, tabId, sessionId }) => {
+      try {
+        const res = await client.waitFor(selector, timeout, { tabId, sessionId });
+        return okJson(res);
+      } catch (err) {
+        return failTool(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_select',
+    {
+      title: 'Select Dropdown Option',
+      description:
+        'Select an option value on a <select> element identified by @eN ref or CSS selector.',
+      inputSchema: {
+        target: z.string().min(1).describe('Snapshot ref (e.g. @e3) or CSS selector'),
+        value: z.string().describe('Option value to select'),
+        engine: z.enum(['auto', 'scripting', 'cdp']).optional(),
+        tabId: z.number().int().positive().optional(),
+        sessionId: z.string().min(1).optional(),
+      },
+    },
+    async ({ target, value, engine, tabId, sessionId }) => {
+      try {
+        const res = await client.select(target, value, {
+          engine: engine as ExecutionEngine | undefined,
+          tabId,
+          sessionId,
+        });
+        return okJson(res);
+      } catch (err) {
+        return failTool(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_hover',
+    {
+      title: 'Hover Element',
+      description: 'Hover over an element identified by @eN ref or CSS selector.',
+      inputSchema: {
+        target: z.string().min(1).describe('Snapshot ref (e.g. @e1) or CSS selector'),
+        engine: z.enum(['auto', 'scripting', 'cdp']).optional(),
+        allFrames: z.boolean().optional(),
+        tabId: z.number().int().positive().optional(),
+        sessionId: z.string().min(1).optional(),
+      },
+    },
+    async ({ target, engine, allFrames, tabId, sessionId }) => {
+      try {
+        const res = await client.hover(target, {
+          engine: engine as ExecutionEngine | undefined,
+          allFrames,
+          tabId,
+          sessionId,
+        });
+        return okJson(res);
+      } catch (err) {
+        return failTool(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_get_text',
+    {
+      title: 'Get Visible Text',
+      description: 'Extract visible text from the page or a specific element.',
+      inputSchema: {
+        selector: z
+          .string()
+          .min(1)
+          .optional()
+          .describe('Optional CSS selector (defaults to full page text)'),
+        allFrames: z.boolean().optional(),
+        tabId: z.number().int().positive().optional(),
+        sessionId: z.string().min(1).optional(),
+      },
+    },
+    async ({ selector, allFrames, tabId, sessionId }) => {
+      try {
+        const res = await client.getText(selector, { allFrames, tabId, sessionId });
+        return okJson(res);
+      } catch (err) {
+        return failTool(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_upload_file',
+    {
+      title: 'Upload File',
+      description: 'Attach one or more local files to a file input via CDP.',
+      inputSchema: {
+        target: z.string().min(1).describe('Snapshot ref or CSS selector for <input type="file">'),
+        files: z.array(z.string().min(1)).min(1).describe('Local file paths to upload'),
+        tabId: z.number().int().positive().optional(),
+        sessionId: z.string().min(1).optional(),
+      },
+    },
+    async ({ target, files, tabId, sessionId }) => {
+      try {
+        const res = await client.uploadFile(target, files, { tabId, sessionId });
+        return okJson(res);
+      } catch (err) {
+        return failTool(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_drag_and_drop',
+    {
+      title: 'Drag and Drop',
+      description:
+        'Drag from a source element/coordinates and drop onto a target element/coordinates.',
+      inputSchema: {
+        sourceTarget: z.string().min(1).optional().describe('Source @eN ref or CSS selector'),
+        targetTarget: z.string().min(1).optional().describe('Destination @eN ref or CSS selector'),
+        sourceX: z.number().optional(),
+        sourceY: z.number().optional(),
+        targetX: z.number().optional(),
+        targetY: z.number().optional(),
+        tabId: z.number().int().positive().optional(),
+        sessionId: z.string().min(1).optional(),
+      },
+    },
+    async ({
+      sourceTarget,
+      targetTarget,
+      sourceX,
+      sourceY,
+      targetX,
+      targetY,
+      tabId,
+      sessionId,
+    }) => {
+      try {
+        const res = await client.dragAndDrop({
+          sourceTarget,
+          targetTarget,
+          sourceX,
+          sourceY,
+          targetX,
+          targetY,
+          tabId,
+          sessionId,
+        });
+        return okJson(res);
+      } catch (err) {
+        return failTool(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_new_tab',
+    {
+      title: 'Open New Tab',
+      description: 'Open a new browser tab in the Antigravity tab group.',
+      inputSchema: {
+        url: z.string().min(1).optional().describe('Optional URL to open in the new tab'),
+        sessionId: z.string().min(1).optional(),
+      },
+    },
+    async ({ url, sessionId }) => {
+      try {
+        const res = await client.newTab(url, { sessionId });
+        return okJson(res);
+      } catch (err) {
+        return failTool(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_close_tab',
+    {
+      title: 'Close Browser Tab',
+      description: 'Close the active or specified browser tab.',
+      inputSchema: {
+        tabId: z.number().int().positive().optional(),
+        sessionId: z.string().min(1).optional(),
+      },
+    },
+    async ({ tabId, sessionId }) => {
+      try {
+        const res = await client.closeTab({ tabId, sessionId });
+        return okJson(res);
+      } catch (err) {
+        return failTool(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_switch_tab',
+    {
+      title: 'Switch Browser Tab',
+      description: 'Activate a browser tab by ID.',
+      inputSchema: {
+        tabId: z.number().int().positive().describe('Target tab ID to activate'),
+        sessionId: z.string().min(1).optional(),
+      },
+    },
+    async ({ tabId, sessionId }) => {
+      try {
+        const res = await client.switchTab(tabId, { sessionId });
+        return okJson(res);
+      } catch (err) {
+        return failTool(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_reload',
+    {
+      title: 'Reload Browser Tab',
+      description: 'Reload the active or specified browser tab.',
+      inputSchema: {
+        tabId: z.number().int().positive().optional(),
+        sessionId: z.string().min(1).optional(),
+      },
+    },
+    async ({ tabId, sessionId }) => {
+      try {
+        const res = await client.reload({ tabId, sessionId });
+        return okJson(res);
+      } catch (err) {
+        return failTool(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_go_back',
+    {
+      title: 'Navigate Back',
+      description: 'Navigate backward in browser history for the active or specified tab.',
+      inputSchema: {
+        tabId: z.number().int().positive().optional(),
+        sessionId: z.string().min(1).optional(),
+      },
+    },
+    async ({ tabId, sessionId }) => {
+      try {
+        const res = await client.goBack({ tabId, sessionId });
+        return okJson(res);
+      } catch (err) {
+        return failTool(err);
+      }
+    },
+  );
+
+  server.registerTool(
+    'browser_workflows',
+    {
+      title: 'Saved Browser Workflows',
+      description: 'List saved workflows on the bridge server or run a saved workflow by ID.',
+      inputSchema: {
+        action: z
+          .enum(['list', 'run'])
+          .describe('Workflow operation: "list" saved workflows or "run" a workflow by ID'),
+        workflowId: z
+          .string()
+          .min(1)
+          .optional()
+          .describe('Workflow ID to execute (required when action is "run")'),
+        stopOnError: z.boolean().optional(),
+        sessionId: z.string().min(1).optional(),
+      },
+    },
+    async ({ action, workflowId, stopOnError, sessionId }) => {
+      try {
+        if (action === 'list') {
+          const res = await client.listWorkflows();
+          return okJson(res);
+        }
+        if (!workflowId) {
+          return failTool(new Error('workflowId is required when action is "run"'));
+        }
+        const res = await client.runWorkflow(workflowId, { stopOnError, sessionId });
         return okJson(res);
       } catch (err) {
         return failTool(err);
