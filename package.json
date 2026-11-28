@@ -4,9 +4,9 @@
   "private": true,
   "description": "Antigravity Chrome Bridge v2.0 monorepo",
   "license": "MIT",
-  "packageManager": "pnpm@12.21.0",
+  "packageManager": "pnpm@12.23.0",
   "engines": {
-    "node": ">=20.0.0"
+    "node": ">=20.20.2"
   },
   "scripts": {
     "start": "pnpm --filter @antigravity-bridge/server start",
