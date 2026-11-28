@@ -1,0 +1,123 @@
+name: Agent Discussions Sync
+
+permissions:
+  contents: read
+  discussions: write
+
+on:
+  push:
+    branches:
+      - master
+      - main
+    paths:
+      - ".github/discussions/**"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Operation mode: bootstrap, create, or reply"
+        required: true
+        default: "bootstrap"
+        type: choice
+        options:
+          - bootstrap
+          - create
+          - reply
+      discussion_number:
+        description: "Target Discussion number (for reply mode)"
+        required: false
+        type: string
+      category:
+        description: "Category name or slug (for create mode, e.g. Ideas, General)"
+        required: false
+        default: "Ideas"
+        type: string
+      title:
+        description: "Discussion title (for create mode)"
+        required: false
+        type: string
+      model:
+        description: "AI model name (e.g. Antigravity, Claude Opus, Codex)"
+        required: false
+        default: "Antigravity"
+        type: string
+      role:
+        description: "Agent role"
+        required: false
+        default: "Lead Implementer"
+        type: string
+      body:
+        description: "Markdown body (for create or reply mode)"
+        required: false
+        type: string
+
+jobs:
+  sync-discussions:
+    name: Sync Multi-Agent GitHub Discussions
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Execute Discussions operation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO_SLUG: ${{ github.repository }}
+          SYNC_MODE: ${{ inputs.mode || 'bootstrap' }}
+          INPUT_NUMBER: ${{ inputs.discussion_number }}
+          INPUT_CATEGORY: ${{ inputs.category }}
+          INPUT_TITLE: ${{ inputs.title }}
+          INPUT_MODEL: ${{ inputs.model || 'Antigravity' }}
+          INPUT_ROLE: ${{ inputs.role || 'Lead Implementer' }}
+          INPUT_BODY: ${{ inputs.body }}
+        run: |
+          set -euo pipefail
+
+          if [ "$SYNC_MODE" = "bootstrap" ]; then
+            EXISTING=$(node scripts/agent-discussions.mjs --repo "$REPO_SLUG" --json list --limit 50)
+
+            SHARED_TITLE="📌 [Shared Context] Multi-Model Collaboration Board & Architecture Invariants"
+            if ! printf '%s' "$EXISTING" | grep -Fq "[Shared Context] Multi-Model Collaboration Board"; then
+              node scripts/agent-discussions.mjs --repo "$REPO_SLUG" create \
+                --category General \
+                --title "$SHARED_TITLE" \
+                --model "Antigravity" \
+                --role "Lead Implementer" \
+                --body-file .github/discussions/01-shared-context.md
+            else
+              echo "Shared Context Discussion already exists — skipping."
+            fi
+
+            OPUS_TITLE="🏛️ [Antigravity -> Claude Opus] v2.1 Hardening Audit & v2.2 Architecture Proposals"
+            if ! printf '%s' "$EXISTING" | grep -Fq "[Antigravity -> Claude Opus] v2.1 Hardening Audit"; then
+              node scripts/agent-discussions.mjs --repo "$REPO_SLUG" create \
+                --category Ideas \
+                --title "$OPUS_TITLE" \
+                --model "Antigravity" \
+                --role "Lead Implementer" \
+                --body-file .github/discussions/02-opus-review.md
+            else
+              echo "Opus Review Discussion already exists — skipping."
+            fi
+          elif [ "$SYNC_MODE" = "create" ]; then
+            BODY_FILE=$(mktemp)
+            printf '%s\n' "$INPUT_BODY" > "$BODY_FILE"
+            node scripts/agent-discussions.mjs --repo "$REPO_SLUG" create \
+              --category "${INPUT_CATEGORY:-Ideas}" \
+              --title "$INPUT_TITLE" \
+              --model "$INPUT_MODEL" \
+              --role "$INPUT_ROLE" \
+              --body-file "$BODY_FILE"
+          elif [ "$SYNC_MODE" = "reply" ]; then
+            BODY_FILE=$(mktemp)
+            printf '%s\n' "$INPUT_BODY" > "$BODY_FILE"
+            node scripts/agent-discussions.mjs --repo "$REPO_SLUG" reply "$INPUT_NUMBER" \
+              --model "$INPUT_MODEL" \
+              --role "$INPUT_ROLE" \
+              --body-file "$BODY_FILE"
+          fi
