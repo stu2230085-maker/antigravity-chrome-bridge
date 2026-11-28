@@ -32,9 +32,9 @@
   },
   "devDependencies": {
     "@antigravity-bridge/server": "workspace:*",
-    "@types/node": "^22.15.17",
-    "typescript": "^5.8.3",
-    "vitest": "^3.1.3",
-    "ws": "^8.18.2"
+    "@types/node": "^22.20.7",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7",
+    "ws": "^8.23.1"
   }
 }
