@@ -16,7 +16,7 @@
     "@antigravity-bridge/protocol": "workspace:*"
   },
   "devDependencies": {
-    "typescript": "^5.8.3",
+    "typescript": "^7.0.2",
     "vite": "^6.3.5",
     "vitest": "^3.1.3"
   }
